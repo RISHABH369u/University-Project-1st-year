@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PTSNS University Shahdol — 3D Campus Tour</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #0a1628; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    canvas { display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
+    #ui { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+    #title {
+      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(8, 20, 55, 0.82); backdrop-filter: blur(10px);
+      color: #fff; padding: 9px 22px; border-radius: 22px;
+      font-size: 13px; font-weight: 600; white-space: nowrap;
+      border: 1px solid rgba(100, 160, 255, 0.28); letter-spacing: 0.4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    }
+    #title span { color: #88b8ff; font-weight: 400; }
+    #hint {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.78);
+      padding: 6px 18px; border-radius: 18px; font-size: 11px; white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    #panel {
+      display: none; position: absolute; top: 16px; right: 16px;
+      background: rgba(255,255,255,0.97); border-radius: 14px;
+      padding: 18px 20px; width: 230px; pointer-events: all;
+      box-shadow: 0 8px 36px rgba(0,0,0,0.25);
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    #panel-icon { font-size: 24px; margin-bottom: 8px; }
+    #panel-name { font-size: 15px; font-weight: 700; color: #1a2a4a; margin-bottom: 6px; }
+    #panel-desc { font-size: 12px; color: #555; line-height: 1.65; }
+    #panel-close {
+      margin-top: 12px; font-size: 11px; padding: 5px 14px; cursor: pointer;
+      border-radius: 8px; border: 1px solid #ddd; background: #f5f5f5;
+      color: #666; transition: background 0.15s;
+    }
+    #panel-close:hover { background: #ececec; }
+    #legend {
+      position: absolute; bottom: 16px; right: 16px;
+      background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.75);
+      padding: 7px 12px; border-radius: 10px; font-size: 10px; line-height: 1.9;
+      pointer-events: none;
+    }
+    #legend div::before { content: '●'; margin-right: 5px; }
+    #legend .lb { color: #88ccff; }
+    #legend .lg { color: #88ff88; }
+    #legend .ly { color: #ffcc44; }
+    #legend .lr { color: #ffaaaa; }
+    #compass {
+      position: absolute; top: 70px; right: 16px;
+      width: 46px; height: 46px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.2);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: white; font-size: 9px; font-weight: 700;
+    }
+    #compass .cn { color: #ff5555; font-size: 16px; line-height: 1; }
+    #loading {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: #0a1628; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 100;
+      color: white;
+    }
+    #loading h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    #loading p { font-size: 13px; color: #88aacc; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <h2>🏛 Building PTSNS University...</h2>
+    <p>Constructing 3D campus of Shahdol</p>
+  </div>
+
+  <canvas id="c"></canvas>
+
+  <div id="ui">
+    <div id="title">🏛 Pandit Shambhunath Shukla University &nbsp;<span>Shahdol, M.P.</span></div>
+
+    <div id="compass">
+      <div class="cn">↑</div>
+      <div>N</div>
+    </div>
+
+    <div id="panel">
+      <div id="panel-icon">🏢</div>
+      <div id="panel-name">Building</div>
+      <div id="panel-desc">Description</div>
+      <button id="panel-close">Close ✕</button>
+    </div>
+
+    <div id="hint">🖱 Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click buildings for info</div>
+
+    <div id="legend">
+      <div class="lb">Academic Buildings</div>
+      <div class="lg">Green Spaces &amp; Sports</div>
+      <div class="ly">Residential &amp; Hostel</div>
+      <div class="lr">Services &amp; Facilities</div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
