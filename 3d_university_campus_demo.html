@@ -1,179 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PTSNS University Shahdol — 3D Campus Tour</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #0a1628; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+canvas { display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
 
-<div style="position: relative; width: 100%; height: 520px; overflow: hidden; border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary);">
-  <canvas id="c" style="width: 100%; height: 100%; display: block;"></canvas>
-  <div id="hud" style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.35); padding: 5px 12px; border-radius: 20px; pointer-events: none; white-space: nowrap;">
-    Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click buildings for info
+#ui { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 10; }
+
+#title {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(8, 20, 55, 0.82); backdrop-filter: blur(10px);
+  color: #fff; padding: 9px 22px; border-radius: 22px;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  border: 1px solid rgba(100, 160, 255, 0.28); letter-spacing: 0.4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+#title span { color: #88b8ff; font-weight: 400; }
+
+#hint {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.78);
+  padding: 6px 18px; border-radius: 18px; font-size: 11px; white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+#panel {
+  display: none; position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.97); border-radius: 14px;
+  padding: 18px 20px; width: 230px; pointer-events: all;
+  box-shadow: 0 8px 36px rgba(0,0,0,0.25);
+  border: 1px solid rgba(0,0,0,0.08);
+}
+#panel-icon { font-size: 24px; margin-bottom: 8px; }
+#panel-name { font-size: 15px; font-weight: 700; color: #1a2a4a; margin-bottom: 6px; }
+#panel-desc { font-size: 12px; color: #555; line-height: 1.65; }
+#panel-close {
+  margin-top: 12px; font-size: 11px; padding: 5px 14px; cursor: pointer;
+  border-radius: 8px; border: 1px solid #ddd; background: #f5f5f5;
+  color: #666; transition: background 0.15s;
+}
+#panel-close:hover { background: #ececec; }
+
+#legend {
+  position: absolute; bottom: 16px; right: 16px;
+  background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.75);
+  padding: 7px 12px; border-radius: 10px; font-size: 10px; line-height: 1.9;
+  pointer-events: none;
+}
+#legend div::before { content: '●'; margin-right: 5px; }
+#legend .lb { color: #88ccff; }
+#legend .lg { color: #88ff88; }
+#legend .ly { color: #ffcc44; }
+#legend .lr { color: #ffaaaa; }
+
+#compass {
+  position: absolute; top: 70px; right: 16px;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: white; font-size: 9px; font-weight: 700;
+}
+#compass .cn { color: #ff5555; font-size: 16px; line-height: 1; }
+
+#loading {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: #0a1628; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 100;
+  color: white;
+}
+#loading h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+#loading p { font-size: 13px; color: #88aacc; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h2>🏛 Building PTSNS University...</h2>
+  <p>Constructing 3D campus of Shahdol</p>
+</div>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="title">🏛 Pandit Shambhunath Shukla University &nbsp;<span>Shahdol, M.P.</span></div>
+
+  <div id="compass">
+    <div class="cn">↑</div>
+    <div>N</div>
   </div>
-  <div id="panel" style="display: none; position: absolute; top: 12px; right: 12px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; width: 190px; box-sizing: border-box;">
-    <div id="ptitle" style="font-weight: 500; font-size: 14px; margin-bottom: 4px; color: var(--color-text-primary);"></div>
-    <div id="pdesc" style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.5;"></div>
-    <button onclick="document.getElementById('panel').style.display='none'" style="margin-top: 10px; font-size: 11px; padding: 3px 10px; cursor: pointer; border-radius: 6px; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); color: var(--color-text-secondary);">Close</button>
+
+  <div id="panel">
+    <div id="panel-icon">🏢</div>
+    <div id="panel-name">Building</div>
+    <div id="panel-desc">Description</div>
+    <button id="panel-close" onclick="document.getElementById('panel').style.display='none'">Close ✕</button>
+  </div>
+
+  <div id="hint">🖱 Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click buildings for info</div>
+
+  <div id="legend">
+    <div class="lb">Academic Buildings</div>
+    <div class="lg">Green Spaces &amp; Sports</div>
+    <div class="ly">Residential &amp; Hostel</div>
+    <div class="lr">Services &amp; Facilities</div>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+// ═══════════════════════════════════════════════
+//  RENDERER
+// ═══════════════════════════════════════════════
 const canvas = document.getElementById('c');
-const cont = canvas.parentElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setSize(cont.offsetWidth, cont.offsetHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
 
+// ═══════════════════════════════════════════════
+//  SCENE
+// ═══════════════════════════════════════════════
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.Fog(0x87CEEB, 50, 130);
+scene.background = new THREE.Color(0x7ec8e3);
+scene.fog = new THREE.Fog(0x9dd8ed, 150, 320);
 
-const camera = new THREE.PerspectiveCamera(55, cont.offsetWidth / cont.offsetHeight, 0.1, 200);
+// ═══════════════════════════════════════════════
+//  CAMERA & ORBIT
+// ═══════════════════════════════════════════════
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 600);
+const orbit = { theta: -0.45, phi: 0.68, r: 120, tx: 0, ty: 0, tz: 32 };
 
-const sph = { theta: 0.78, phi: 1.0, r: 52 };
-function applyCamera() {
+function updateCam() {
   camera.position.set(
-    sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
-    sph.r * Math.cos(sph.phi),
-    sph.r * Math.sin(sph.phi) * Math.cos(sph.theta)
+    orbit.tx + orbit.r * Math.sin(orbit.phi) * Math.sin(orbit.theta),
+    orbit.ty + orbit.r * Math.cos(orbit.phi),
+    orbit.tz + orbit.r * Math.sin(orbit.phi) * Math.cos(orbit.theta)
   );
-  camera.lookAt(0, 0, 0);
+  camera.lookAt(orbit.tx, 0, orbit.tz);
 }
-applyCamera();
+updateCam();
 
-const amb = new THREE.AmbientLight(0xfff8ee, 0.55);
-scene.add(amb);
-const sun = new THREE.DirectionalLight(0xfff3cc, 1.1);
-sun.position.set(35, 55, 25);
+// ═══════════════════════════════════════════════
+//  LIGHTING
+// ═══════════════════════════════════════════════
+scene.add(new THREE.AmbientLight(0xffeedd, 0.62));
+scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3a6820, 0.45));
+
+const sun = new THREE.DirectionalLight(0xfff8e8, 1.18);
+sun.position.set(80, 110, 70);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -65;
-sun.shadow.camera.right = 65;
-sun.shadow.camera.top = 65;
-sun.shadow.camera.bottom = -65;
-sun.shadow.camera.far = 200;
+sun.shadow.mapSize.width = 4096;
+sun.shadow.mapSize.height = 4096;
+sun.shadow.camera.left = -140;
+sun.shadow.camera.right = 140;
+sun.shadow.camera.top = 140;
+sun.shadow.camera.bottom = -140;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 500;
+sun.shadow.bias = -0.001;
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0x87ceeb, 0x4a7c59, 0.35));
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshLambertMaterial({ color: 0x4a7c59 }));
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+// ═══════════════════════════════════════════════
+//  GEOMETRY HELPERS
+// ═══════════════════════════════════════════════
+const mats = {};
+function getMat(color) {
+  if (!mats[color]) mats[color] = new THREE.MeshLambertMaterial({ color });
+  return mats[color];
+}
 
-function path(x, z, w, d) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color: 0xc9b99a }));
+function mkBox(x, y, z, w, h, d, color, castSh = true, recvSh = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), getMat(color));
+  m.position.set(x, y + h / 2, z);
+  if (castSh) m.castShadow = true;
+  if (recvSh) m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+function mkPlane(x, z, w, d, color, y = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), getMat(color));
   m.rotation.x = -Math.PI / 2;
-  m.position.set(x, 0.02, z);
+  m.position.set(x, y, z);
   m.receiveShadow = true;
   scene.add(m);
+  return m;
 }
-path(0, 0, 2, 50); path(0, 0, 50, 2);
-path(-10, 5, 2, 18); path(10, 5, 2, 18);
-path(-10, -8, 18, 2); path(10, -8, 18, 2);
 
-const buildings = [];
-const bdata = [
-  { name: 'Main Building', dept: 'Administration & Principal Office', color: 0xD4A574, x: 0, z: -14, w: 9, h: 11, d: 7 },
-  { name: 'Science Block', dept: 'Physics · Chemistry · Biology Labs', color: 0x6E8FB0, x: -15, z: -8, w: 8, h: 9, d: 6 },
-  { name: 'Engineering Block', dept: 'CSE · Mechanical · Electrical Depts', color: 0x7B70B8, x: 15, z: -8, w: 8, h: 9, d: 6 },
-  { name: 'Central Library', dept: 'Books · Digital Resources · Reading Hall', color: 0xB87070, x: -15, z: 9, w: 7, h: 6, d: 6 },
-  { name: 'Canteen', dept: 'Food Court · Student Hangout', color: 0x6CA06C, x: 15, z: 9, w: 7, h: 4, d: 6 },
-  { name: 'Auditorium', dept: 'Events · Seminars · Cultural Fests', color: 0xBF9B6A, x: 0, z: 16, w: 11, h: 7, d: 9 },
-  { name: 'Hostel Block A', dept: 'Boys Hostel — 200 seats', color: 0x7FA87F, x: -24, z: -2, w: 5, h: 14, d: 5 },
-  { name: 'Sports Complex', dept: 'Gym · Indoor Games · Pool', color: 0xA07890, x: 24, z: 3, w: 8, h: 5, d: 7 },
+// ═══════════════════════════════════════════════
+//  Old wall function (simple solid wall without jali or pillars)
+// ═══════════════════════════════════════════════
+
+// function mkWall(x1, z1, x2, z2, h = 2.6, color = 0xd2cfc0) {
+//   const dx = x2 - x1, dz = z2 - z1;
+//   const len = Math.sqrt(dx * dx + dz * dz);
+//   const m = new THREE.Mesh(new THREE.BoxGeometry(len, h, 0.55), getMat(color));
+//   m.position.set((x1 + x2) / 2, h / 2, (z1 + z2) / 2);
+//   m.rotation.y = Math.atan2(dz, dx);
+//   m.castShadow = true;
+//   scene.add(m);
+// }
+
+
+// ═══════════════════════════════════════════════
+//  Wall new elaborate function with jali and pillars
+// ═══════════════════════════════════════════════
+
+
+function mkWall(x1, z1, x2, z2, h = 2.6, color = 0xd2cfc0) {
+  const dx = x2 - x1, dz = z2 - z1;
+  const len = Math.sqrt(dx * dx + dz * dz);
+  const angle = Math.atan2(dz, dx);
+
+  const group = new THREE.Group();
+
+  // === BASE WALL (solid bottom) ===
+  const baseHeight = h * 0.65;
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(len, baseHeight, 0.6),
+    getMat(color)
+  );
+  base.position.y = baseHeight / 2;
+  base.castShadow = true;
+  group.add(base);
+
+  // === TOP JALI (grill style) ===
+  const grillHeight = h - baseHeight;
+
+  const segmentWidth = 2; // spacing of jali
+  const segments = Math.floor(len / segmentWidth);
+
+  for (let i = 0; i < segments; i++) {
+    const gx = -len / 2 + segmentWidth * i + segmentWidth / 2;
+
+    // vertical bars
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, grillHeight, 0.08),
+      getMat(0x444444)
+    );
+    bar.position.set(gx, baseHeight + grillHeight / 2, 0);
+    group.add(bar);
+  }
+
+  // top horizontal beam
+  const topBeam = new THREE.Mesh(
+    new THREE.BoxGeometry(len, 0.15, 0.2),
+    getMat(0x999999)
+  );
+  topBeam.position.y = h + 0.05;
+  group.add(topBeam);
+
+  // === PILLARS (every few meters) ===
+  const pillarGap = 4;
+  const pillarCount = Math.floor(len / pillarGap);
+
+  for (let i = 0; i <= pillarCount; i++) {
+    const px = -len / 2 + i * pillarGap;
+
+    const pillar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, h + 0.4, 0.8),
+      getMat(0xc8c4b0)
+    );
+    pillar.position.set(px, (h + 0.4) / 2, 0);
+    pillar.castShadow = true;
+    group.add(pillar);
+  }
+
+  // === POSITION & ROTATION ===
+  group.position.set((x1 + x2) / 2, 0, (z1 + z2) / 2);
+  group.rotation.y = angle;
+
+  scene.add(group);
+}
+
+
+// ═══════════════════════════════════════════════
+//  GROUND
+// ═══════════════════════════════════════════════
+mkPlane(0, 35, 420, 420, 0x537a30);
+
+// ═══════════════════════════════════════════════
+//  ROADS
+// ═══════════════════════════════════════════════
+const ROAD = 0xb5a898;
+const ROAD_SIDE = 0xc8b870; // yellow curb
+
+// Main north road (from gate inward)
+mkPlane(0, 5, 10, 38, ROAD, 0.02);   // Gate to IT Cell
+mkPlane(0, 35, 10, 30, ROAD, 0.02);  // IT Cell to Agriculture zone
+mkPlane(0, 63, 10, 34, ROAD, 0.02);  // Library zone
+
+// Left branch to Main Building
+mkPlane(-14, 20, 4.5, 24, ROAD, 0.02);
+mkPlane(-25, 10, 4.5, 4,  ROAD, 0.02);
+
+// Right branch to Agriculture & beyond
+mkPlane(15, 40, 5, 20, ROAD, 0.02);
+mkPlane(-8, 52, 5, 14, ROAD, 0.02); // to multipurpose
+
+// Yellow road kerbs (painted lines)
+for (let z = -12; z <= 78; z += 5) {
+  mkPlane(-5.2, z, 0.4, 4.5, ROAD_SIDE, 0.025);
+  mkPlane(5.2, z, 0.4, 4.5, ROAD_SIDE, 0.025);
+}
+
+// ═══════════════════════════════════════════════
+//  PARKING AREAS
+// ═══════════════════════════════════════════════
+function mkParking(x, z, w, d) {
+  mkPlane(x, z, w, d, 0x7a7a6a, 0.03);
+  const nLines = Math.floor(d / 3.8);
+  for (let i = 0; i <= nLines; i++) {
+    const lz = z - d / 2 + i * 3.8;
+    mkPlane(x, lz, w - 1, 0.14, 0xffffff, 0.04);
+  }
+}
+mkParking(20, 9, 18, 18);   // Visitor / student parking (right of gate road)
+mkParking(-16, 24, 14, 12); // Teachers / faculty parking (left of IT Cell)
+
+// ═══════════════════════════════════════════════
+//  LAWNS & OPEN AREAS
+// ═══════════════════════════════════════════════
+mkPlane(0, 3, 9, 8, 0x4CAF50, 0.01);      // Entrance median / green strip
+mkPlane(-10, 18, 10, 14, 0x4CAF50, 0.01); // Lawn in front of main building
+mkPlane(-26, 5, 16, 8, 0x4CAF50, 0.01);   // Side lawn main building
+mkPlane(10, 50, 16, 14, 0x4CAF50, 0.01);  // Central FREE SPACE / open ground
+mkPlane(-20, 62, 10, 12, 0x4CAF50, 0.01); // Left side lawn
+mkPlane(4, 76, 28, 8, 0x4CAF50, 0.01);    // Back lawn
+
+// Sports ground
+mkPlane(40, 62, 22, 24, 0x45a049, 0.01);
+mkPlane(40, 62, 3, 14, 0xc2b260, 0.02);   // Cricket pitch
+
+// ═══════════════════════════════════════════════
+//  BOUNDARY WALL (campus perimeter)
+// ═══════════════════════════════════════════════
+// South wall with gate gap
+mkWall(-62, -14, -14, -14);
+mkWall(14, -14, 62, -14);
+// Other sides
+mkWall(-62, -14, -62, 88);
+mkWall(62, -14, 62, 88);
+mkWall(-62, 88, 62, 88);
+
+// Internal compound walls
+mkWall(-42, 0, -42, 45, 2, 0xc8c4b0);
+mkWall(36, 0, 36, 55, 2, 0xc8c4b0);
+
+// ═══════════════════════════════════════════════
+//  BUILDING SYSTEM
+// ═══════════════════════════════════════════════
+const clickable = [];
+const winMat = new THREE.MeshLambertMaterial({ color: 0x90c0d8, emissive: 0x1a3a5a, emissiveIntensity: 0.12 });
+const doorMat = new THREE.MeshLambertMaterial({ color: 0x4a3218 });
+
+function floorHeight(floors) {
+  return floors === 1 ? 4 : floors === 2 ? 7.5 : floors === 3 ? 11 : floors === 4 ? 14.5 : 18;
+}
+
+function addBuilding({ x, z, w, d, floors, color, name, desc, icon = '🏢', roofColor = 0x888888 }) {
+  const h = floorHeight(floors);
+  const perFloor = h / floors;
+  const group = new THREE.Group();
+
+  // Main body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  body.position.y = h / 2;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  body.userData = { name, desc, icon };
+  group.add(body);
+  clickable.push(body);
+
+  // Roof slab + parapet
+  const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.6, d + 0.6), getMat(roofColor));
+  roofSlab.position.y = h + 0.3;
+  roofSlab.castShadow = true;
+  group.add(roofSlab);
+
+  // Parapet wall on roof edges
+  const parW = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.8, 0.3), getMat(0x999999));
+  parW.position.y = h + 1;
+  parW.position.z = d / 2 + 0.45;
+  group.add(parW);
+  const parW2 = parW.clone(); parW2.position.z = -d / 2 - 0.45; group.add(parW2);
+  const parD = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, d + 0.6), getMat(0x999999));
+  parD.position.y = h + 1; parD.position.x = w / 2 + 0.45; group.add(parD);
+  const parD2 = parD.clone(); parD2.position.x = -w / 2 - 0.45; group.add(parD2);
+
+  // Floor separator lines
+  for (let f = 1; f < floors; f++) {
+    const sep = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.15, 0.25, d + 0.15),
+      getMat(0xaaaaaa)
+    );
+    sep.position.y = perFloor * f;
+    group.add(sep);
+  }
+
+  // Corner columns
+  const colMat = getMat(0xbbbbbb);
+  for (let cx of [-w / 2, w / 2]) {
+    for (let cz of [-d / 2, d / 2]) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.6, h + 0.6, 0.6), colMat);
+      col.position.set(cx, h / 2, cz);
+      group.add(col);
+    }
+  }
+
+  // Windows: front & back
+  const nWX = Math.max(2, Math.floor(w / 2.0));
+  const nWZ = Math.max(1, Math.floor(d / 2.4));
+
+  for (let fl = 0; fl < floors; fl++) {
+    const wy = perFloor * fl + perFloor * 0.52;
+
+    for (let col = 0; col < nWX; col++) {
+      const wx = -w / 2 + (w / nWX) * (col + 0.5);
+      // Front
+      const wf = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.78), winMat);
+      wf.position.set(wx, wy, d / 2 + 0.01);
+      group.add(wf);
+      // Back
+      const wb = wf.clone();
+      wb.rotation.y = Math.PI; wb.position.z = -d / 2 - 0.01;
+      group.add(wb);
+    }
+    // Side windows
+    for (let col = 0; col < nWZ; col++) {
+      const wz = -d / 2 + (d / nWZ) * (col + 0.5);
+      const wl = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.78), winMat);
+      wl.rotation.y = -Math.PI / 2; wl.position.set(-w / 2 - 0.01, wy, wz);
+      group.add(wl);
+      const wr = wl.clone(); wr.rotation.y = Math.PI / 2; wr.position.x = w / 2 + 0.01;
+      group.add(wr);
+    }
+  }
+
+  // Ground floor door
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.5), doorMat);
+  door.position.set(0, 1.25, d / 2 + 0.02);
+  group.add(door);
+
+  // Door frame
+  const dfMat = getMat(0x6a5030);
+  const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.6, 0.08), dfMat);
+  dfL.position.set(-0.75, 1.3, d / 2 + 0.02); group.add(dfL);
+  const dfR = dfL.clone(); dfR.position.x = 0.75; group.add(dfR);
+  const dfT = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.15, 0.08), dfMat);
+  dfT.position.set(0, 2.6, d / 2 + 0.02); group.add(dfT);
+
+  group.position.set(x, 0, z);
+  scene.add(group);
+  return group;
+}
+
+// ═══════════════════════════════════════════════
+//  ALL CAMPUS BUILDINGS
+// ═══════════════════════════════════════════════
+
+// 1. IT Cell — 2 floors, right-center after gate
+addBuilding({
+  x: 15, z: 25, w: 14, d: 9, floors: 2, color: 0xcdd8e8,
+  name: 'IT Cell', icon: '💻',
+  desc: '2-floor building housing the University IT Department. Manages computer labs, internet infrastructure, digital resources, university website, and all technical services for the campus.'
+});
+
+// 2. Main Academic Building — 3 floors, large, LEFT side
+addBuilding({
+  x: -28, z: 17, w: 30, d: 17, floors: 3, color: 0xc8d4e6, roofColor: 0x7a8a99,
+  name: 'Main Academic Building', icon: '🎓',
+  desc: 'The largest building on campus with 3 floors. Houses primary lecture halls, major departments (Arts, Commerce, Science), Examination Cell, and core administrative offices. Most regular classes are conducted here.'
+});
+
+// 3. Agriculture Block — single floor, right, further in
+addBuilding({
+  x: 18, z: 42, w: 20, d: 11, floors: 1, color: 0xd0e8c8,
+  name: 'Agriculture Block', icon: '🌾',
+  desc: 'Single-floor building dedicated to the Agriculture Department. Features modern classrooms, soil science lab, botanical garden access, agronomy practical rooms, and a herbarium section.'
+});
+
+// 4. Multipurpose Hall — 2 floors, LEFT of road, opposite free space
+addBuilding({
+  x: -13, z: 54, w: 24, d: 15, floors: 2, color: 0xe8d8ba, roofColor: 0x8a7a5a,
+  name: 'Multipurpose Hall (Sabhagaar)', icon: '🎭',
+  desc: 'Grand multipurpose auditorium. Used for Annual Convocations, cultural festivals, seminars, guest lectures, and university events. Features a large stage, podium, and seating capacity for 500+ attendees.'
+});
+
+// 5. Central Library — 2 floors, ahead on road axis
+addBuilding({
+  x: 6, z: 67, w: 16, d: 11, floors: 2, color: 0xc5d4ee,
+  name: 'Central Library', icon: '📚',
+  desc: '2-floor central library with over 50,000 books, research journals, periodicals, and digital resources. Features a spacious reading hall, e-library section, reference section, and a separate newspaper/magazine area.'
+});
+
+// 6. Canteen — 1 floor, right of library (across)
+addBuilding({
+  x: 20, z: 65, w: 12, d: 8, floors: 1, color: 0xf0e4c0,
+  name: 'University Canteen', icon: '🍽️',
+  desc: "Main canteen serving affordable vegetarian meals, snacks, samosas, tea, coffee, and cold drinks. A popular hangout spot for students. Open from 8 AM to 7 PM on working days."
+});
+
+// 7. Hostel Block — 4 floors, far RIGHT
+addBuilding({
+  x: 40, z: 34, w: 12, d: 10, floors: 4, color: 0xd8cce4,
+  name: 'Student Hostel', icon: '🏠',
+  desc: '4-floor hostel building providing accommodation for outstation students. Features single and double occupancy rooms, common room, study hall, reading area, warden cabin, and basic kitchen facilities.'
+});
+
+// 8. VC Residence — 2 floors, far LEFT back area
+addBuilding({
+  x: -42, z: 62, w: 14, d: 11, floors: 2, color: 0xf0e8d5, roofColor: 0x8a7a5a,
+  name: "Vice Chancellor's Residence", icon: '🏡',
+  desc: "Official bungalow of the Honourable Vice Chancellor. Located in a peaceful, well-landscaped corner of the campus with a private garden and security post."
+});
+
+// 9. Administrative Block — 2 floors, left back (beyond main building)
+addBuilding({
+  x: -28, z: 38, w: 18, d: 10, floors: 2, color: 0xd2dcea,
+  name: 'Administrative Block', icon: '🏛️',
+  desc: 'Houses Registrar office, Accounts & Finance department, Examination Cell, Scholarship Wing, Student Affairs office, and other key administrative services of the university.'
+});
+
+// 10. Science Block — 2 floors, right mid
+addBuilding({
+  x: 22, z: 56, w: 13, d: 9, floors: 2, color: 0xd0e8da,
+  name: 'Science Block', icon: '🔬',
+  desc: 'Dedicated to Physics, Chemistry, Botany, and Zoology departments. Equipped with modern laboratories, fume hoods, research benches, and departmental faculty cabins.'
+});
+
+// 11. Faculty / Staff Block — 2 floors, far left near main building
+addBuilding({
+  x: -42, z: 22, w: 9, d: 9, floors: 2, color: 0xe4d8c8,
+  name: 'Faculty Block', icon: '👨‍🏫',
+  desc: 'Houses faculty offices, staff rooms, and departmental head cabins. Staff can meet students, conduct tutorials, and hold departmental meetings here.'
+});
+
+// 12. Additional building (Exam / NCC Block)
+addBuilding({
+  x: -42, z: 40, w: 9, d: 8, floors: 1, color: 0xdde0d0,
+  name: 'NCC / NSS Block', icon: '🎖️',
+  desc: 'Dedicated facility for NCC and NSS units of the university. Used for drill practice, training sessions, community service coordination, and cadet activities.'
+});
+
+// ═══════════════════════════════════════════════
+//  MAIN GATE
+// ═══════════════════════════════════════════════
+{
+  const wMat = getMat(0xf0f0f0);   // white pillars
+  const bMat = getMat(0x1a4edd);   // blue banner
+  const gMat = getMat(0x888888);   // grey metal
+
+  // Left main pillar
+  const lp = new THREE.Mesh(new THREE.BoxGeometry(3.5, 9, 2.8), wMat);
+  lp.position.set(-10, 4.5, -14); lp.castShadow = true; scene.add(lp);
+  // Right main pillar
+  const rp = lp.clone(); rp.position.x = 10; scene.add(rp);
+
+  // Pillar decorative cap
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.7, 3.5), wMat);
+  const lc = cap.clone(); lc.position.set(-10, 9.35, -14); scene.add(lc);
+  const rc = cap.clone(); rc.position.set(10, 9.35, -14); scene.add(rc);
+
+  // Blue banner / name board
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(26, 2.8, 1.4), bMat);
+  banner.position.set(0, 9.8, -14); banner.castShadow = true; scene.add(banner);
+
+  // White decorative strips on banner
+  const strMat = getMat(0xffffff);
+  const strip1 = new THREE.Mesh(new THREE.BoxGeometry(26, 0.28, 1.42), strMat);
+  strip1.position.set(0, 8.5, -14); scene.add(strip1);
+  const strip2 = strip1.clone(); strip2.position.y = 11.1; scene.add(strip2);
+
+  // Circular university emblem (round disc) on banner
+  const emblem = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.5, 16), getMat(0xf5f0e0));
+  emblem.rotation.z = Math.PI / 2; emblem.position.set(-10, 9.8, -13.4); scene.add(emblem);
+  const emblem2 = emblem.clone(); emblem2.position.x = 10; scene.add(emblem2);
+
+  // Fence pillars + rails (left & right of gate)
+  for (let xi of [-1, 1]) {
+    for (let i = 1; i <= 5; i++) {
+      const fp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 4, 0.55), wMat);
+      fp.position.set(xi * (10 + i * 3.2), 2, -14); scene.add(fp);
+      // Horizontal rail
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.18, 0.18), gMat);
+      rail.position.set(xi * (10 + i * 3.2 - 1.5), 2.8, -14); scene.add(rail);
+      const rail2 = rail.clone(); rail2.position.y = 1.2; scene.add(rail2);
+    }
+  }
+
+  // Security cabin (right side of gate)
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3.8, 4, 3.8), getMat(0xeaeaea));
+  cab.position.set(16, 2, -10); cab.castShadow = true; scene.add(cab);
+  const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.5, 4.4), getMat(0x777777));
+  cabRoof.position.set(16, 4.25, -10); scene.add(cabRoof);
+  cab.userData = {
+    name: 'Security Cabin', icon: '👮',
+    desc: '24/7 staffed security cabin at the main gate. All visitors must register here. Manages vehicle entry logs, visitor passes, and overall campus security.'
+  };
+  clickable.push(cab);
+
+  // Entrance road markings (zebra crossing look)
+  for (let i = 0; i < 5; i++) {
+    mkPlane(i * 2.2 - 4.4, -8, 1.6, 1.4, 0xe8e8e8, 0.03);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  TREES (sphere + cylinder style)
+// ═══════════════════════════════════════════════
+function mkTree(x, z, s = 1, leaf = 0x2E7D32) {
+  const g = new THREE.Group();
+  // Trunk
+  const t = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22 * s, 0.3 * s, 2.8 * s, 6),
+    getMat(0x6B3A18)
+  );
+  t.position.y = 1.4 * s; t.castShadow = true; g.add(t);
+  // Foliage: two spheres for fuller look
+  const f1 = new THREE.Mesh(new THREE.SphereGeometry(1.7 * s, 7, 5), getMat(leaf));
+  f1.position.y = 4.5 * s; f1.castShadow = true; g.add(f1);
+  const f2 = new THREE.Mesh(new THREE.SphereGeometry(1.2 * s, 6, 4), getMat(leaf === 0x2E7D32 ? 0x388E3C : leaf));
+  f2.position.set(0.7 * s, 5.5 * s, 0.4 * s); f2.castShadow = true; g.add(f2);
+  g.position.set(x, 0, z); scene.add(g);
+}
+
+function mkPalm(x, z, s = 1) {
+  const g = new THREE.Group();
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(0.15*s, 0.22*s, 7*s, 6), getMat(0x9b7530));
+  t.position.y = 3.5 * s; t.castShadow = true; g.add(t);
+  for (let i = 0; i < 6; i++) {
+    const fr = new THREE.Mesh(new THREE.ConeGeometry(0.12*s, 4*s, 5), getMat(0x3a8820));
+    fr.position.y = 6.5 * s;
+    fr.rotation.z = 0.65; fr.rotation.y = (Math.PI * 2 / 6) * i;
+    g.add(fr);
+  }
+  g.position.set(x, 0, z); scene.add(g);
+}
+
+// Road-side trees (both sides of main road)
+for (let z = -12; z <= 80; z += 4.8) {
+  mkTree(-5.8, z, 0.82);
+  mkTree(5.8, z, 0.82);
+}
+
+// Around Main Building
+for (let x = -46; x <= -14; x += 5.5) {
+  mkTree(x, 4, 0.9, 0x276b27);
+  mkTree(x, 32, 0.88, 0x276b27);
+}
+// Right side trees
+for (let x = 28; x <= 44; x += 5) {
+  mkTree(x, 18, 0.9); mkTree(x, 50, 0.9);
+}
+// Back trees
+for (let x = -55; x <= 55; x += 7) mkTree(x, 84, 1.15, 0x1a5c1a);
+// Side trees along perimeter
+for (let z = 0; z <= 80; z += 10) {
+  mkTree(-58, z, 1.0, 0x1f5c1f);
+  mkTree(58, z, 1.0, 0x1f5c1f);
+}
+
+// Palm trees at entrance
+mkPalm(-8, -8, 1.0); mkPalm(8, -8, 1.0);
+mkPalm(-11, 2, 0.9); mkPalm(11, 2, 0.9);
+
+// Cluster trees in free space area
+for (let i = 0; i < 5; i++) {
+  mkTree(8 + Math.cos(i * 1.25) * 5, 50 + Math.sin(i * 1.25) * 4, 0.78, 0x388E3C);
+}
+
+// ═══════════════════════════════════════════════
+//  STREET LIGHTS
+// ═══════════════════════════════════════════════
+function mkStreetLight(x, z) {
+  const pMat = getMat(0x6a6a6a);
+  const lMat = new THREE.MeshLambertMaterial({ color: 0xffff88, emissive: 0xffee44, emissiveIntensity: 0.6 });
+
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 8, 6), pMat);
+  pole.position.set(x, 4, z); scene.add(pole);
+
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 4), pMat);
+  arm.rotation.z = Math.PI / 2; arm.position.set(x + 0.9, 8, z); scene.add(arm);
+
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.32, 6, 4), lMat);
+  lamp.position.set(x + 2, 8, z); scene.add(lamp);
+}
+
+for (let z = -12; z <= 80; z += 12) {
+  mkStreetLight(-7.5, z);
+  mkStreetLight(7.5, z);
+}
+
+// ═══════════════════════════════════════════════
+//  ENTRANCE MONUMENT / ROUNDABOUT
+// ═══════════════════════════════════════════════
+{
+  const stMat = getMat(0xccccbb);
+  const auMat = new THREE.MeshLambertMaterial({ color: 0xc8920a, emissive: 0x5a3a00, emissiveIntensity: 0.25 });
+  // Base platform (octagon approximated with cylinder)
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4, 0.9, 10), stMat);
+  base.position.set(0, 0.45, 3); scene.add(base);
+  const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.4, 1.1, 8), stMat);
+  tier2.position.set(0, 1.4, 3); scene.add(tier2);
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 5, 8), stMat);
+  pillar.position.set(0, 4, 3); scene.add(pillar);
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.72, 10, 8), auMat);
+  globe.position.set(0, 6.8, 3); scene.add(globe);
+}
+
+// ═══════════════════════════════════════════════
+//  FLAG POLES near entrance
+// ═══════════════════════════════════════════════
+function mkFlagPole(x, z) {
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 13, 5), getMat(0xaaaaaa));
+  pole.position.set(x, 6.5, z); scene.add(pole);
+
+  // Tricolor Indian flag (simplified 3 strips)
+  const fw = 3.2, fh = 0.62;
+  const colors = [0xFF9933, 0xffffff, 0x138808];
+  colors.forEach((c, i) => {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide }));
+    f.position.set(x + fw / 2, 12.3 - i * fh, z);
+    scene.add(f);
+  });
+  // Ashoka chakra (simple circle)
+  const ch = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 4, 12), getMat(0x000080));
+  ch.position.set(x + fw / 2, 12.0, z); scene.add(ch);
+}
+
+mkFlagPole(-5, 0); mkFlagPole(0, 0); mkFlagPole(5, 0);
+
+// Flag on main building roof
+mkFlagPole(-28, 18);
+
+// ═══════════════════════════════════════════════
+//  WATER TANK on main building
+// ═══════════════════════════════════════════════
+{
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.2, 10), getMat(0x778899));
+  tank.position.set(-22, 12.8, 12); scene.add(tank);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.3, 10), getMat(0x667788));
+  lid.position.set(-22, 14, 12); scene.add(lid);
+}
+
+// ═══════════════════════════════════════════════
+//  BENCH / SEATING AREAS
+// ═══════════════════════════════════════════════
+function mkBench(x, z, rotY = 0) {
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.18, 0.55), getMat(0x8B5E3C));
+  seat.position.y = 0.5; g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.55, 0.12), getMat(0x8B5E3C));
+  back.position.set(0, 0.88, 0.22); g.add(back);
+  for (let xi of [-0.85, 0.85]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.55), getMat(0x555555));
+    leg.position.set(xi, 0.25, 0); g.add(leg);
+  }
+  g.position.set(x, 0, z); g.rotation.y = rotY;
+  scene.add(g);
+}
+
+mkBench(-7, 8, 0); mkBench(7, 8, 0);
+mkBench(-6, 30, Math.PI / 2); mkBench(6, 30, Math.PI / 2);
+mkBench(12, 50, 0); mkBench(-12, 50, 0);
+
+// ═══════════════════════════════════════════════
+//  CARS in parking
+// ═══════════════════════════════════════════════
+function mkCar(x, z, color, rotY = 0) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1, 1.8), getMat(color));
+  body.position.y = 0.7; g.add(body);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 1.6), getMat(color));
+  top.position.set(-0.3, 1.58, 0); g.add(top);
+  for (let wx of [-1.4, 1.4]) {
+    for (let wz of [-0.85, 0.85]) {
+      const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.22, 8), getMat(0x222222));
+      wh.rotation.z = Math.PI / 2; wh.position.set(wx, 0.38, wz); g.add(wh);
+    }
+  }
+  g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+}
+
+const carColors = [0xcc3333, 0x3355cc, 0xffffff, 0x333333, 0xddbb44, 0x228833];
+const carSpots = [
+  [18, 3], [18, 6.5], [18, 10], [18, 13.5], [22, 3], [22, 6.5],
+  [-14, 18], [-14, 21.5], [-18, 18], [-18, 21.5], [-22, 18]
 ];
+carSpots.forEach(([x, z], i) => mkCar(x, z, carColors[i % 6]));
 
-bdata.forEach(b => {
-  const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-  const mat = new THREE.MeshLambertMaterial({ color: b.color });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(b.x, b.h / 2, b.z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.userData = { name: b.name, dept: b.dept };
-  scene.add(mesh);
-  buildings.push(mesh);
+// ═══════════════════════════════════════════════
+//  RAYCASTER & INTERACTION
+// ═══════════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+let isDragging = false, prevX = 0, prevY = 0, dragDist = 0;
 
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.4, 0.5, b.d + 0.4), new THREE.MeshLambertMaterial({ color: 0x8B5E3C }));
-  roof.position.set(b.x, b.h + 0.25, b.z);
-  roof.castShadow = true;
-  scene.add(roof);
-
-  for (let fl = 0; fl < Math.floor(b.h / 3); fl++) {
-    for (let col = 0; col < Math.max(1, Math.floor(b.w / 2)); col++) {
-      const wm = new THREE.Mesh(new THREE.PlaneGeometry(0.65, 0.85), new THREE.MeshLambertMaterial({ color: 0xB8D9ED, emissive: 0x224466, emissiveIntensity: 0.15 }));
-      const wx = b.x - b.w / 2 + 1.1 + col * 2;
-      wm.position.set(wx, 1.5 + fl * 3, b.z + b.d / 2 + 0.01);
-      scene.add(wm);
+window.addEventListener('mousedown', e => {
+  isDragging = true; prevX = e.clientX; prevY = e.clientY; dragDist = 0;
+});
+window.addEventListener('mouseup', e => {
+  isDragging = false;
+  if (dragDist < 5) {
+    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouseVec, camera);
+    const hits = raycaster.intersectObjects(clickable, false);
+    if (hits.length && hits[0].object.userData.name) {
+      const { name, desc, icon } = hits[0].object.userData;
+      document.getElementById('panel-icon').textContent = icon;
+      document.getElementById('panel-name').textContent = name;
+      document.getElementById('panel-desc').textContent = desc;
+      document.getElementById('panel').style.display = 'block';
     }
   }
 });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevX, dy = e.clientY - prevY;
+  dragDist += Math.abs(dx) + Math.abs(dy);
+  orbit.theta -= dx * 0.0036;
+  orbit.phi = Math.max(0.08, Math.min(1.5, orbit.phi + dy * 0.0036));
+  prevX = e.clientX; prevY = e.clientY;
+  updateCam();
+});
+window.addEventListener('wheel', e => {
+  orbit.r = Math.max(15, Math.min(240, orbit.r + e.deltaY * 0.075));
+  updateCam();
+  e.preventDefault();
+}, { passive: false });
 
-function tree(x, z, s) {
-  s = s || 1;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18 * s, 0.25 * s, 2 * s, 7), new THREE.MeshLambertMaterial({ color: 0x6B3F00 }));
-  trunk.position.set(x, s, z);
-  trunk.castShadow = true;
-  scene.add(trunk);
-  const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.3 * s, 3 * s, 7), new THREE.MeshLambertMaterial({ color: 0x2D8A2D }));
-  leaves.position.set(x, s * 3.5, z);
-  leaves.castShadow = true;
-  scene.add(leaves);
+// Touch support
+let lastT = null, pinchDist0 = 0;
+window.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { lastT = e.touches[0]; dragDist = 0; }
+  if (e.touches.length === 2) {
+    pinchDist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+}, { passive: true });
+window.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && lastT) {
+    const t = e.touches[0];
+    const dx = t.clientX - lastT.clientX, dy = t.clientY - lastT.clientY;
+    dragDist += Math.abs(dx) + Math.abs(dy);
+    orbit.theta -= dx * 0.004;
+    orbit.phi = Math.max(0.08, Math.min(1.5, orbit.phi + dy * 0.004));
+    lastT = t; updateCam();
+  } else if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    orbit.r = Math.max(15, Math.min(240, orbit.r - (d - pinchDist0) * 0.28));
+    pinchDist0 = d; updateCam();
+  }
+}, { passive: false });
+window.addEventListener('touchend', () => { lastT = null; });
+
+// Keyboard: WASD pan
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+function handleKeys() {
+  const speed = 0.5;
+  const dir = new THREE.Vector3();
+  if (keys['a']) dir.x -= 1;
+  if (keys['d']) dir.x += 1;
+  if (keys['w']) dir.z -= 1;
+  if (keys['s']) dir.z += 1;
+  if (dir.length() > 0) {
+    dir.normalize().multiplyScalar(speed);
+    dir.applyEuler(new THREE.Euler(0, orbit.theta, 0));
+    orbit.tx += dir.x; orbit.tz += dir.z;
+    updateCam();
+  }
+  if (keys['q']) { orbit.r = Math.max(15, orbit.r - speed * 1.5); updateCam(); }
+  if (keys['e']) { orbit.r = Math.min(240, orbit.r + speed * 1.5); updateCam(); }
 }
 
-[[-6,6],[6,6],[-6,-4],[6,-4],[-9,3],[9,3],[-20,10],[20,10],[-20,-10],[20,-10],[3,-22],[-3,-22],[3,23],[-3,23],[-18,-16],[18,-16],[-18,16],[18,16],[-30,8],[30,8],[0,-28],[0,28],[-28,-18],[28,-18]].forEach(([x,z]) => tree(x, z));
-tree(-35, -20, 1.3); tree(35, -20, 1.3); tree(-35, 20, 1.3); tree(35, 20, 1.3);
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-
-canvas.addEventListener('click', e => {
-  const r = canvas.getBoundingClientRect();
-  mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-  mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(buildings);
-  if (hits.length && hits[0].object.userData.name) {
-    const d = hits[0].object.userData;
-    document.getElementById('ptitle').textContent = d.name;
-    document.getElementById('pdesc').textContent = d.dept;
-    document.getElementById('panel').style.display = 'block';
-  }
-});
-
-let dragging = false, prev = { x: 0, y: 0 };
-canvas.addEventListener('mousedown', e => { dragging = true; prev = { x: e.clientX, y: e.clientY }; });
-window.addEventListener('mouseup', () => dragging = false);
-canvas.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  sph.theta -= (e.clientX - prev.x) * 0.005;
-  sph.phi = Math.max(0.18, Math.min(1.45, sph.phi + (e.clientY - prev.y) * 0.005));
-  prev = { x: e.clientX, y: e.clientY };
-  applyCamera();
-});
-canvas.addEventListener('wheel', e => {
-  sph.r = Math.max(12, Math.min(90, sph.r + e.deltaY * 0.06));
-  applyCamera();
-  e.preventDefault();
-}, { passive: false });
-
-let lt = null;
-canvas.addEventListener('touchstart', e => { lt = e.touches[0]; }, { passive: true });
-canvas.addEventListener('touchmove', e => {
-  if (!lt) return;
-  const t = e.touches[0];
-  sph.theta -= (t.clientX - lt.clientX) * 0.005;
-  sph.phi = Math.max(0.18, Math.min(1.45, sph.phi + (t.clientY - lt.clientY) * 0.005));
-  lt = t;
-  applyCamera();
-  e.preventDefault();
-}, { passive: false });
-
+// Resize
 window.addEventListener('resize', () => {
-  renderer.setSize(cont.offsetWidth, cont.offsetHeight);
-  camera.aspect = cont.offsetWidth / cont.offsetHeight;
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 });
 
-(function animate() {
+// ═══════════════════════════════════════════════
+//  ANIMATE
+// ═══════════════════════════════════════════════
+let frameCount = 0;
+function animate() {
   requestAnimationFrame(animate);
+  handleKeys();
+  // Subtle flag waving (future: add morph targets)
   renderer.render(scene, camera);
-})();
+  frameCount++;
+  if (frameCount === 2) {
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+animate();
 </script>
+</body>
+</html>
