@@ -4,7 +4,7 @@ import { createRoads } from './world/roads.js';
 import { createParking } from './world/parking.js';
 import { createBuildings } from './world/buildings.js';
 import { createGate } from './world/gate.js';
-import { mkTree, mkPalm } from './utils/trees.js';
+import { mkGulmohar, mkPeepal } from './utils/trees.js';
 import { mkStreetLight } from './utils/lights.js';
 import { mkBench, mkCar } from './utils/props.js';
 import { setupInteraction } from './interaction.js';
@@ -40,26 +40,26 @@ createGate();
 
 // trees
 for (let z = -12; z <= 80; z += 4.8) {
-  mkTree(-5.8, z, 0.82);
-  mkTree(5.8, z, 0.82);
+  mkGulmohar(-5.8, z, 0.82);
+  mkGulmohar(5.8, z, 0.82);
 }
 for (let x = -46; x <= -14; x += 5.5) {
-  mkTree(x, 4, 0.9, 0x276b27);
-  mkTree(x, 32, 0.88, 0x276b27);
+  mkGulmohar(x, 4, 0.9, 0x276b27);
+  mkGulmohar(x, 32, 0.88, 0x276b27);
 }
 for (let x = 28; x <= 44; x += 5) {
-  mkTree(x, 18, 0.9);
-  mkTree(x, 50, 0.9);
+  mkGulmohar(x, 18, 0.9);
+  mkGulmohar(x, 50, 0.9);
 }
-for (let x = -55; x <= 55; x += 7) mkTree(x, 84, 1.15, 0x1a5c1a);
+for (let x = -55; x <= 55; x += 7) mkGulmohar(x, 84, 1.15, 0x1a5c1a);
 for (let z = 0; z <= 80; z += 10) {
-  mkTree(-58, z, 1.0, 0x1f5c1f);
-  mkTree(58, z, 1.0, 0x1f5c1f);
+  mkGulmohar(-58, z, 1.0, 0x1f5c1f);
+  mkGulmohar(58, z, 1.0, 0x1f5c1f);
 }
-mkPalm(-8, -8, 1.0); mkPalm(8, -8, 1.0);
-mkPalm(-11, 2, 0.9); mkPalm(11, 2, 0.9);
+mkPeepal(-8, -8, 1.0); mkPeepal(8, -8, 1.0);
+mkPeepal(-11, 2, 0.9); mkPeepal(11, 2, 0.9);
 for (let i = 0; i < 5; i++) {
-  mkTree(8 + Math.cos(i * 1.25) * 5, 50 + Math.sin(i * 1.25) * 4, 0.78, 0x388E3C);
+  mkGulmohar(8 + Math.cos(i * 1.25) * 5, 50 + Math.sin(i * 1.25) * 4, 0.78, 0x388E3C);
 }
 
 // street lights
