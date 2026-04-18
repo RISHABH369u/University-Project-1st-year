@@ -508,95 +508,234 @@ export function addRightBlock(g, cx, cz) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  ██████  MAIN GATE  ██████
-//  Grand entrance gate matching PTSNS style
+//  PTSNS UNIVERSITY — ACCURATE MAIN GATE
+//  Photo analysis:
+//   • Two MASSIVE wide rectangular pillars (not thin columns)
+//   • Flat horizontal connecting beam at top (carries the blue sign)
+//   • Blue sign: white Hindi text + circular emblems on both ends
+//   • Two white metal gate LEAVES with many horizontal slats (not iron bars)
+//   • Clean modern portal architecture, light grey concrete
+//   • Low hedge bushes at pillar bases
 // ═══════════════════════════════════════════════════════════════════
+
 export function addMainGate(g, cx, cz) {
-  const pM  = new THREE.MeshLambertMaterial({color:0xf5f4f0});
-  const blM = new THREE.MeshLambertMaterial({color:0x1a3a8a});
-  const gM  = new THREE.MeshLambertMaterial({color:0xb8880a});
 
-  // ── Main pillars (2 × tall) ─────────────────────────────────────
-  for(let px of [-12.5, 12.5]) {
-    const pw=3.5;
-    at(g, bx(pw,11,pw,pM), cx+px, 5.5, cz);
-    at(g, bx(pw+0.85,0.72,pw+0.85,pM), cx+px, 11.36, cz);   // cap
-    at(g, bx(pw+0.1,0.55,pw+0.1,gM), cx+px, 3.8, cz);        // gold band
-    at(g, bx(pw+0.1,0.55,pw+0.1,gM), cx+px, 8.2, cz);        // gold band
+  // ── Materials ─────────────────────────────────────────────────────
+  const concM   = new THREE.MeshLambertMaterial({ color: 0xeceae5 });  // concrete off-white
+  const concSdM = new THREE.MeshLambertMaterial({ color: 0xdedcd6 });  // shadowed recess
+  const blueM   = new THREE.MeshLambertMaterial({ color: 0x1a82c4 });  // university blue
+  const whiteM  = new THREE.MeshLambertMaterial({ color: 0xfafafa });  // gate white
+  const emblWM  = new THREE.MeshLambertMaterial({ color: 0xffffff });  // emblem white
+  const hedgeM  = new THREE.MeshLambertMaterial({ color: 0x2a5c2e });  // dark hedge
+  const hedgeLM = new THREE.MeshLambertMaterial({ color: 0x3d8040 });  // light hedge top
+  const groundM = new THREE.MeshLambertMaterial({ color: 0xc8bfa8 });  // driveway concrete
 
-    // Circular emblem on front face
-    const disk=cy(1.0,1.0,0.35,16,gM);
-    disk.rotation.z=Math.PI/2;
-    disk.position.set(cx+px, 9, cz+pw/2+0.18); g.add(disk);
+  // ── Key dimensions (matched to photo proportions) ─────────────────
+  const PW  = 6.0;   // pillar width  (X) — very wide per photo
+  const PD  = 4.0;   // pillar depth  (Z)
+  const PH  = 10.0;  // pillar height
+  const GAP = 22.0;  // clear opening between inner pillar faces
+  const PCX = GAP / 2 + PW / 2;  // pillar centre offset from gate centre = 14
+
+  const BH  = 3.5;   // beam height
+  const BD  = PD;    // beam depth same as pillar
+  const BW  = GAP + PW;     // beam spans pillar-centre to pillar-centre = 28
+  const BY  = PH + BH / 2;  // beam centre Y
+
+  const GH  = 7.2;   // gate leaf height
+  const GLW = GAP / 2 - 0.4; // gate leaf width (each half) ≈ 10.6
+
+  // ══ 1. MAIN PILLARS (left + right) ═══════════════════════════════
+  for (const side of [-1, 1]) {
+    const px = cx + side * PCX;
+
+    // ── Pillar main body
+    at(g, bx(PW, PH, PD, concM), px, PH / 2, cz);
+
+    // ── Top cornice cap (slightly wider)
+    at(g, bx(PW + 0.8, 0.55, PD + 0.8, concM), px, PH + 0.27, cz);
+
+    // ── Front face decorative recess panel (subtle shadow indent)
+    at(g, bx(PW - 1.6, PH - 2.0, 0.09, concSdM),
+      px, PH / 2, cz + PD / 2 + 0.05);
+
+    // ── Bottom chamfer / plinth
+    at(g, bx(PW + 0.5, 0.55, PD + 0.5, concM), px, 0.27, cz);
+
+    // ── Hedge row in front of each pillar
+    at(g, bx(PW, 0.95, 1.1, hedgeM),  px, 0.47, cz + PD / 2 + 0.55);
+    at(g, bx(PW, 0.42, 1.0, hedgeLM), px, 1.06, cz + PD / 2 + 0.55);
+
+    // ── Side hedge (wraps around pillar sides)
+    at(g, bx(1.2, 0.85, PD, hedgeM),  px + side * (PW / 2 + 0.6), 0.42, cz);
+    at(g, bx(1.2, 0.38, PD, hedgeLM), px + side * (PW / 2 + 0.6), 0.98, cz);
   }
 
-  // ── Name arch between pillars ────────────────────────────────────
-  at(g, bx(29, 3.0, 1.0, blM), cx, 10.0, cz);
-  at(g, bx(29.2,0.35,1.1,gM), cx, 8.6, cz);
-  at(g, bx(29.2,0.35,1.1,gM), cx, 11.65, cz);
-  at(g, bx(14, 0.6, 0.8, gM), cx, 11.82, cz);  // crest
+  // ══ 2. TOP CONNECTING BEAM ═══════════════════════════════════════
+  at(g, bx(BW, BH, BD, concM), cx, BY, cz);
 
-  // University emblem atop
-  const emb=oct(0.9,gM); emb.position.set(cx,12.8,cz); g.add(emb);
-  at(g, cy(0.25,0.25,1.2,8,pM), cx, 12.0, cz);
+  // Bottom ledge visible when looking up through gate
+  at(g, bx(BW + 0.2, 0.4, BD + 0.3, concM), cx, PH + 0.2, cz);
 
-  // ── Gate bars (iron, 5 per leaf × 2 leaves) ─────────────────────
-  for(let side of [-1,1]) {
-    for(let b=0;b<5;b++) {
-      const bx2=cx+side*(3.2+b*1.55);
-      at(g, cy(0.1,0.1,8.0,5,M.iron), bx2, 4.0, cz);
-      at(g, con(0.18,0.72,4,gM), bx2, 8.36, cz);
+  // Top cap of full portal structure
+  at(g, bx(BW + 0.6, 0.5, BD + 0.6, concM), cx, PH + BH + 0.25, cz);
+
+  // ══ 3. BLUE UNIVERSITY SIGN PANEL ════════════════════════════════
+  const SW = BW - 0.7;   // sign width
+  const SH = 2.7;        // sign height
+  const SZ = cz + BD / 2 + 0.14; // sign sits on front face of beam
+
+  // Blue panel
+  at(g, bx(SW, SH, 0.24, blueM), cx, BY, SZ);
+
+  // White border strips top & bottom
+  at(g, bx(SW + 0.4, 0.14, 0.18, whiteM), cx, BY + SH / 2 + 0.07, SZ);
+  at(g, bx(SW + 0.4, 0.14, 0.18, whiteM), cx, BY - SH / 2 - 0.07, SZ);
+  // White border strips left & right
+  at(g, bx(0.14, SH + 0.3, 0.18, whiteM), cx - SW / 2 - 0.07, BY, SZ);
+  at(g, bx(0.14, SH + 0.3, 0.18, whiteM), cx + SW / 2 + 0.07, BY, SZ);
+
+  // ── Circular emblems on sign (one each side, like photo) ──────────
+  for (const side of [-1, 1]) {
+    const ex = cx + side * (SW / 2 - 1.5);
+
+    // Outer white ring
+    const ring = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 1.1, 0.2, 24),
+      emblWM
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(ex, BY, SZ + 0.06);
+    g.add(ring);
+
+    // Blue inner fill
+    const inner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.82, 0.82, 0.22, 24),
+      blueM
+    );
+    inner.rotation.x = Math.PI / 2;
+    inner.position.set(ex, BY, SZ + 0.12);
+    g.add(inner);
+
+    // White inner symbol (simplified university seal dot)
+    const dot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.35, 0.24, 12),
+      emblWM
+    );
+    dot.rotation.x = Math.PI / 2;
+    dot.position.set(ex, BY, SZ + 0.16);
+    g.add(dot);
+
+    // Tiny ring detail
+    const ringSmall = new THREE.Mesh(
+      new THREE.TorusGeometry(0.58, 0.06, 6, 18),
+      emblWM
+    );
+    ringSmall.rotation.x = Math.PI / 2;
+    ringSmall.position.set(ex, BY, SZ + 0.18);
+    g.add(ringSmall);
+  }
+
+  // ══ 4. WHITE GATE LEAVES (left + right) ══════════════════════════
+  //  Photo shows: many horizontal slats filling the opening,
+  //  framed by thick stile on the outside edge
+  for (const side of [-1, 1]) {
+    const lx = cx + side * (GLW / 2 + 0.35); // leaf centre X
+
+    // Outer (pillar-side) thick stile
+    at(g, bx(0.32, GH + 0.6, 0.26, whiteM),
+      lx + side * (GLW / 2), GH / 2 + 0.05, cz);
+
+    // Inner (centre-meeting) stile
+    at(g, bx(0.26, GH + 0.6, 0.24, whiteM),
+      lx - side * (GLW / 2), GH / 2 + 0.05, cz);
+
+    // Top rail
+    at(g, bx(GLW + 0.2, 0.3, 0.24, whiteM), lx, GH + 0.15, cz);
+
+    // Bottom rail
+    at(g, bx(GLW + 0.2, 0.3, 0.24, whiteM), lx, 0.15, cz);
+
+    // Centre mid-rail
+    at(g, bx(GLW - 0.2, 0.24, 0.2, whiteM), lx, GH * 0.52, cz);
+
+    // ── Horizontal slats (dense, matching photo) ───────────────────
+    const N_SLATS = 22;
+    const slotTop = GH - 0.35;
+    const slotBot = 0.35;
+    const gap = (slotTop - slotBot) / (N_SLATS + 1);
+    for (let i = 1; i <= N_SLATS; i++) {
+      const sy = slotBot + i * gap;
+      at(g, bx(GLW - 0.25, 0.11, 0.14, whiteM), lx, sy, cz);
     }
-    // Gate rails
-    for(let ry of [1.5,4.0,7.0]) at(g, bx(8,0.18,0.18,M.iron), cx+side*6.4, ry, cz);
-  }
 
-  // ── Smaller pedestrian pillars ────────────────────────────────────
-  for(let px of [-24.5, 24.5]) {
-    at(g, bx(1.6,6.0,1.6,pM), cx+px, 3, cz);
-    at(g, bx(2.1,0.5,2.1,pM), cx+px, 6.25, cz);
-  }
-
-  // ── Compound wall sections ────────────────────────────────────────
-  const wM2=new THREE.MeshLambertMaterial({color:0xeeede8});
-  for(let [wx,wlen] of [[-40.5,21.5],[40.5,21.5]]) {
-    at(g, bx(wlen,2.8,0.5,wM2), cx+wx, 1.4, cz);
-    at(g, bx(wlen+0.2,0.35,0.7,M.conc), cx+wx, 2.98, cz);
-    // Notch merlons on wall top
-    const nm=Math.floor(wlen/2.5);
-    for(let i=0;i<nm;i++) {
-      const nx=cx+wx-wlen/2+(wlen/nm)*(i+0.5);
-      at(g, bx(1.0,2.85+0.06,0.58,wM2), nx, 2.98+0.03, cz);
+    // ── Vertical pickets (thin uprights between slats) ─────────────
+    const N_PICKETS = 16;
+    const pStart = lx - GLW / 2 + 0.45;
+    const pStep  = (GLW - 0.7) / (N_PICKETS - 1);
+    for (let i = 0; i < N_PICKETS; i++) {
+      at(g, bx(0.09, GH - 0.4, 0.1, whiteM), pStart + i * pStep, GH / 2, cz);
     }
   }
 
-  // ── Security cabin ────────────────────────────────────────────────
-  at(g, bx(4,4.5,4,pM), cx+20, 2.25, cz-5);
-  at(g, bx(4.6,0.4,4.6,M.roof), cx+20, 4.7, cz-5);
-  at(g, bx(3,0.6,0.15,blM), cx+20, 3.8, cz-5+2.08);  // sign
-  // Security cabin window
-  at(g, bx(1.2,0.9,0.08,M.win), cx+20, 2.8, cz-5+2.06);
-  const sec=bx(4,4.5,4,new THREE.MeshBasicMaterial({visible:false}));
-  sec.position.set(cx+20,2.25,cz-5);
-  sec.userData={name:'Security Cabin',icon:'👮',desc:'24/7 security checkpoint.'};
-  g.add(sec); clickable.push(sec);
+  // ══ 5. GROUND PLATFORM / DRIVEWAY APRON ══════════════════════════
+  const apronW = BW + PW + 2;
+  at(g, bx(apronW, 0.24, PD + 2.5, groundM), cx, 0.12, cz);
 
-  // ── Zebra crossing ────────────────────────────────────────────────
-  for(let i=0;i<6;i++) at(g, bx(1.4,0.05,2.0,M.white), cx-7+i*2.5, 0.025, cz+4.5);
+  // Road approach lines
+  at(g, bx(apronW, 0.04, 0.22, concM), cx, 0.24, cz + PD / 2 + 1.25);
 
-  // ── Flag poles (3) ────────────────────────────────────────────────
-  for(let fx of [-8,0,8]) {
-    at(g, cy(0.09,0.13,14,6,M.steel), cx+fx, 7, cz-8);
-    // Indian tricolor
-    const colors=[0xFF9933,0xffffff,0x138808];
-    colors.forEach((c,i) => {
-      const strip=pl(3,0.65,new THREE.MeshLambertMaterial({color:c,side:THREE.DoubleSide}));
-      strip.position.set(cx+fx+1.6,13.5-i*0.65,cz-8); g.add(strip);
-    });
-    const ch=tor(0.25,0.03,4,14,new THREE.MeshLambertMaterial({color:0x000088}));
-    ch.position.set(cx+fx+1.6,13.18,cz-8); g.add(ch);
+  // ══ 6. ZEBRA CROSSING IN FRONT ════════════════════════════════════
+  for (let i = 0; i < 7; i++) {
+    at(g, bx(1.5, 0.03, 2.5, whiteM),
+      cx - 7.5 + i * 2.5, 0.015, cz + PD / 2 + 3.5);
   }
-  
+
+  // ══ 7. SECURITY CABIN (right side, matching photo layout) ════════
+  const cabM   = concM;
+  const roofM  = new THREE.MeshLambertMaterial({ color: 0x4a3828 });
+  const signBM = blueM;
+  const winM   = new THREE.MeshLambertMaterial({ color: 0x88bbcc, transparent: true, opacity: 0.75 });
+
+  const cabX = cx + PCX + PW / 2 + 3.5;
+  const cabZ = cz - 5.5;
+
+  at(g, bx(4.5, 4.8, 4.5, cabM),          cabX, 2.4,  cabZ);
+  at(g, bx(5.1, 0.45, 5.1, roofM),        cabX, 4.95, cabZ);
+  // Roof overhang
+  at(g, bx(5.4, 0.18, 5.4, roofM),        cabX, 4.72, cabZ);
+  // Door
+  at(g, bx(1.4, 3.0, 0.09, concSdM),      cabX - 0.5, 1.5, cabZ + 2.27);
+  // Window
+  at(g, bx(1.5, 1.1, 0.08, winM),         cabX + 0.8, 2.9, cabZ + 2.27);
+  // Blue name strip
+  at(g, bx(3.5, 0.55, 0.1, signBM),       cabX, 4.1, cabZ + 2.28);
+
+  // Barrier arm from security cabin
+  const armPostX = cabX - 2.0;
+  at(g, bx(0.18, 2.2, 0.18, concM), armPostX, 1.1, cz + 1.5);  // post
+  // Arm (horizontal, red+white striped)
+  at(g, bx(8.5, 0.14, 0.14,
+    new THREE.MeshLambertMaterial({ color: 0xdd2222 })),
+    armPostX + 4.25, 2.35, cz + 1.5);
+  for (let s = 0; s < 7; s++) {
+    if (s % 2 === 0)
+      at(g, bx(1.1, 0.15, 0.15, whiteM), armPostX + 0.8 + s * 1.2, 2.35, cz + 1.5);
+  }
+
+  // ══ 8. CLICKABLE INVISIBLE BOUNDING BOX ══════════════════════════
+  const hitBox = bx(
+    BW + PW, PH + BH, BD,
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  hitBox.position.set(cx, (PH + BH) / 2, cz);
+  hitBox.userData = {
+    name: 'Main Gate — PTSNS University',
+    icon: '🚪',
+    desc: 'Grand entrance gate of Pandit S.N. Shukla University, Shahdol (M.P.)'
+  };
+  g.add(hitBox);
+  if (typeof clickable !== 'undefined') clickable.push(hitBox);
 }
 
 // ═══════════════════════════════════════════════════════════════════
