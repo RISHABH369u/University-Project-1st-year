@@ -11,14 +11,16 @@ import { setupInteraction } from './interaction.js';
 import { animate } from './animate.js';
 import { mkPlane } from './helpers.js';
 import { mkWall } from './utils/wall.js';
+import { createBoundary } from './world/boundary.js';
 
 createGround();
 createRoads();
 createParking();
+createBoundary();
 
 // lawns & open areas
-mkPlane(0, 3, 9, 8, 0x4caf50, 0.01);
-mkPlane(-10, 18, 10, 14, 0x4caf50, 0.01);
+mkPlane(0, 3, 9, 8, 0x4caf50, 0.01); 
+mkPlane(-10, 18, 10, 14, 0x4caf50, 0.01); 
 mkPlane(-26, 5, 16, 8, 0x4caf50, 0.01);
 mkPlane(10, 50, 16, 14, 0x4caf50, 0.01);
 mkPlane(-20, 62, 10, 12, 0x4caf50, 0.01);
@@ -26,14 +28,18 @@ mkPlane(4, 76, 28, 8, 0x4caf50, 0.01);
 mkPlane(40, 62, 22, 24, 0x45a049, 0.01);
 mkPlane(40, 62, 3, 14, 0xc2b260, 0.02);
 
-// compound walls
-mkWall(-62, -14, -14, -14);
-mkWall(14, -14, 62, -14);
-mkWall(-62, -14, -62, 88);
-mkWall(62, -14, 62, 88);
-mkWall(-62, 88, 62, 88);
-mkWall(-42, 0, -42, 45, 2, 0xc8c4b0);
-mkWall(36, 0, 36, 55, 2, 0xc8c4b0);
+// // compound walls
+
+// // so iska first component and last wall ki lenth set krte hai ob beeech ke 2 angle 
+
+// mkWall(-5, -14, -14, -14); //gate ke right side wali wall
+// mkWall(14, -14, 62, -14);//gate ke Left side wali wall
+// mkWall(-62, -14, -62, 207); //gate ke right side wali side wall
+// mkWall(-6, -14, -62, 123); // extanded wall for right side
+// mkWall(62, -14, 62, 88);
+// mkWall(-62, 88, 62, 88);
+// mkWall(-42, 0, -42, 45, 2, 0xc8c4b0);
+// mkWall(36, 0, 36, 55, 2, 0xc8c4b0);
 
 createBuildings();
 createGate();
