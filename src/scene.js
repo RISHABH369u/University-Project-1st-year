@@ -28,21 +28,43 @@ export function updateCam() {
 
 updateCam();
 
+// ─── Controls shim ───────────────────────────────────────────────────────────
+// This is NOT a real OrbitControls instance — it's a compatibility bridge so
+// the devtool's TransformControls can:
+//   1. Disable orbit dragging while moving/rotating a gizmo  (controls.enabled)
+//   2. Focus camera on a selected object                      (controls.target + controls.update)
+// Your interaction.js must check `controls.enabled` before processing mouse input.
+
+export const controls = {
+  enabled: true,
+
+  // Mirrors the orbit look-at point so devtool's F-key focus works
+  target: new THREE.Vector3(orbit.tx, 0, orbit.tz),
+
+  // Called by devtool after it sets controls.target — applies to your orbit system
+  update() {
+    orbit.tx = this.target.x;
+    orbit.tz = this.target.z;
+    updateCam();
+  },
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 scene.add(new THREE.AmbientLight(0xffeedd, 0.62));
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3a6820, 0.45));
 
 const sun = new THREE.DirectionalLight(0xfff8e8, 1.18);
 sun.position.set(80, 110, 70);
 sun.castShadow = true;
-sun.shadow.mapSize.width = 4096;
+sun.shadow.mapSize.width  = 4096;
 sun.shadow.mapSize.height = 4096;
-sun.shadow.camera.left = -140;
-sun.shadow.camera.right = 140;
-sun.shadow.camera.top = 140;
+sun.shadow.camera.left   = -140;
+sun.shadow.camera.right  =  140;
+sun.shadow.camera.top    =  140;
 sun.shadow.camera.bottom = -140;
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 500;
-sun.shadow.bias = -0.001;
+sun.shadow.camera.near   = 1;
+sun.shadow.camera.far    = 500;
+sun.shadow.bias          = -0.001;
 scene.add(sun);
 
 export function resizeRenderer() {
