@@ -3,7 +3,7 @@ import { resizeRenderer, camera, scene, controls } from './scene.js';
 import { createGround }    from './world/ground.js';
 import { createRoads }     from './world/roads.js';
 import { createParking }   from './world/parking.js';
-import { createBuildings } from './world/buildings.js';
+import { createBuildings } from './utils/buildings.js';
 import { createGate }      from './world/gate.js';
 import { mkGulmohar, mkPeepal } from './utils/trees.js';
 import { mkStreetLight }   from './utils/lights.js';
@@ -19,7 +19,7 @@ import { initDevTool, updateDevTool } from './devtool.js';  // ← DevTool
 createGround();
 createRoads();
 createParking();
-//createBoundary();
+createBoundary();
 
 // Lawns & open areas
 mkPlane(0,   3,  9,  8, 0x4caf50, 0.01);

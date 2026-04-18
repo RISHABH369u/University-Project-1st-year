@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { camera } from './scene.js';
-import { clickable } from './world/buildings.js';
+import { clickable } from './utils/buildings.js';
 
 const raycaster = new THREE.Raycaster();
 const mouseVec = new THREE.Vector2();
@@ -16,8 +16,11 @@ panelClose.addEventListener('click', () => {
 });
 
 export function setupInteraction() {
+  
   window.addEventListener('mouseup', (e) => {
+    if (!window._dtCanOrbit()) return;
     mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+    if (!window._dtCanOrbit()) return;
     mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouseVec, camera);
     const hits = raycaster.intersectObjects(clickable, false);
