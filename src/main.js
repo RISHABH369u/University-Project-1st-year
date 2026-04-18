@@ -1,4 +1,5 @@
-import { resizeRenderer } from './scene.js';
+import * as THREE from 'three';
+import { resizeRenderer, camera, scene } from './scene.js'; 
 import { createGround } from './world/ground.js';
 import { createRoads } from './world/roads.js';
 import { createParking } from './world/parking.js';
@@ -28,18 +29,8 @@ mkPlane(4, 76, 28, 8, 0x4caf50, 0.01);
 mkPlane(40, 62, 22, 24, 0x45a049, 0.01);
 mkPlane(40, 62, 3, 14, 0xc2b260, 0.02);
 
-// // compound walls
-
-// // so iska first component and last wall ki lenth set krte hai ob beeech ke 2 angle 
-
-// mkWall(-5, -14, -14, -14); //gate ke right side wali wall
-// mkWall(14, -14, 62, -14);//gate ke Left side wali wall
-// mkWall(-62, -14, -62, 207); //gate ke right side wali side wall
-// mkWall(-6, -14, -62, 123); // extanded wall for right side
-// mkWall(62, -14, 62, 88);
-// mkWall(-62, 88, 62, 88);
-// mkWall(-42, 0, -42, 45, 2, 0xc8c4b0);
-// mkWall(36, 0, 36, 55, 2, 0xc8c4b0);
+// compound walls
+// (Tumhara generated code yahan aayega jab tum final copy-paste karoge)
 
 createBuildings();
 createGate();
@@ -87,5 +78,148 @@ const carSpots = [
 carSpots.forEach(([x, z], i) => mkCar(x, z, carColors[i % 6]));
 
 setupInteraction();
+
+
+// ======================================================================
+// 🛠️ PRO DEVELOPER TOOL: IN-BROWSER LEVEL EDITOR
+// ======================================================================
+
+// 1. UI Overlay for Instructions
+const editorUI = document.createElement('div');
+editorUI.innerHTML = `
+  <div style="position:fixed; top:20px; left:20px; background:rgba(10, 22, 40, 0.85); color:#88b8ff; padding:15px; border-radius:12px; font-family:sans-serif; font-size:13px; z-index:9999; pointer-events:none; border: 1px solid rgba(100, 160, 255, 0.3); backdrop-filter: blur(5px);">
+    <h3 style="margin:0 0 10px 0; color:#fff; font-size:15px;">🛠️ Editor Mode</h3>
+    <p style="margin:5px 0;"><b>Double Click:</b> Start / End Wall</p>
+    <p style="margin:5px 0;"><b>Shift + Dbl Click:</b> Snap to Straight Line</p>
+    <p style="margin:5px 0;"><b>Single Click:</b> Select Wall</p>
+    <p style="margin:5px 0;"><b>Del / Backspace:</b> Remove Selected</p>
+    <p style="margin:5px 0;"><b>Z key:</b> Undo Last Wall</p>
+    <p style="margin:5px 0;"><b>Esc key:</b> Cancel / Unselect</p>
+    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.2); margin:10px 0;">
+    <p style="margin:0; color:#4caf50; font-weight:bold;">Press F12 for Code</p>
+  </div>
+`;
+document.body.appendChild(editorUI);
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let clickCount = 0;
+let startX = 0, startZ = 0;
+
+// Editor State
+const drawnWalls = []; // Banayi hui walls store karne ke liye
+let selectedWall = null;
+
+// Bounding Box for Highlighting Selected Wall
+const selectionBox = new THREE.BoxHelper(new THREE.Mesh(), 0xffff00);
+selectionBox.visible = false;
+scene.add(selectionBox);
+
+// Start point marker (Red dot)
+const markerGeom = new THREE.SphereGeometry(0.5);
+const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const tempMarker = new THREE.Mesh(markerGeom, markerMat);
+tempMarker.visible = false;
+scene.add(tempMarker);
+
+// Helper function: Console mein sab code ek sath print karne ke liye
+function printAllCode() {
+  console.clear();
+  console.log("%c✅ COPY THIS ENTIRE BLOCK TO main.js:", "color: #00ffff; font-size: 16px; font-weight: bold;");
+  drawnWalls.forEach(wall => console.log(wall.userData.code));
+  console.log("%c---------------------------------------", "color: #00ffff;");
+}
+
+// Single Click -> Selection
+window.addEventListener('click', (event) => {
+  if (event.detail > 1) return; // Double click ignore karo
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  let found = false;
+  // Har drawn wall ke andar check karo click hua hai kya
+  for (const wall of drawnWalls) {
+    const intersects = raycaster.intersectObjects(wall.children, true);
+    if (intersects.length > 0) {
+      selectedWall = wall;
+      selectionBox.setFromObject(wall); // Highlight box lagao
+      selectionBox.visible = true;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    selectedWall = null;
+    selectionBox.visible = false;
+  }
+});
+
+// Double Click -> Draw
+window.addEventListener('dblclick', (event) => {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const intersectPoint = new THREE.Vector3();
+  
+  if (raycaster.ray.intersectPlane(groundPlane, intersectPoint)) {
+    // Agar Shift daba hai toh 0.5 ke multiple pe round off (Snapping)
+    let x = event.shiftKey ? Math.round(intersectPoint.x * 2) / 2 : Math.round(intersectPoint.x * 10) / 10;
+    let z = event.shiftKey ? Math.round(intersectPoint.z * 2) / 2 : Math.round(intersectPoint.z * 10) / 10;
+
+    if (clickCount === 0) {
+      startX = x; startZ = z;
+      tempMarker.position.set(startX, 0.5, startZ);
+      tempMarker.visible = true;
+      clickCount = 1;
+    } else {
+      // Wall banao aur array mein daalo
+      const wallGroup = mkWall(startX, startZ, x, z);
+      wallGroup.userData = { code: `mkWall(${startX}, ${startZ}, ${x}, ${z});` };
+      drawnWalls.push(wallGroup);
+      
+      tempMarker.visible = false;
+      clickCount = 0;
+      printAllCode();
+    }
+  }
+});
+
+// Keyboard Shortcuts (Delete, Undo, Esc)
+window.addEventListener('keydown', (event) => {
+  // ESC: Cancel drawing
+  if (event.key === 'Escape') {
+    clickCount = 0;
+    tempMarker.visible = false;
+    selectedWall = null;
+    selectionBox.visible = false;
+  }
+  
+  // Delete / Backspace: Remove selected wall
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selectedWall) {
+    scene.remove(selectedWall); // Screen se hatao
+    const index = drawnWalls.indexOf(selectedWall);
+    if (index > -1) drawnWalls.splice(index, 1); // Array se hatao
+    
+    selectedWall = null;
+    selectionBox.visible = false;
+    printAllCode(); // Naya code print karo jisme ye wall nahi hogi
+  }
+
+  // 'Z' (Undo): Remove last drawn wall
+  if ((event.key === 'z' || event.key === 'Z') && clickCount === 0 && drawnWalls.length > 0) {
+    const lastWall = drawnWalls.pop();
+    scene.remove(lastWall);
+    if (selectedWall === lastWall) {
+      selectedWall = null;
+      selectionBox.visible = false;
+    }
+    printAllCode();
+  }
+});
+// ======================================================================
+
 window.addEventListener('resize', resizeRenderer);
 animate();
