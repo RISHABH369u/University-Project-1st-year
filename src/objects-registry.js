@@ -22,6 +22,14 @@ import { mkStreetLight }         from './utils/lights.js';
 import { mkBench, mkCar, mkStreetLamp, mkBin, mkBulletinBoard, mkFountain, mkBikeRack, mkBike, mkFlagPole, mkPicnicTable, mkVendingMachine, mkBusShelter, mkStatue, mkFireHydrant, mkBollard, mkSignpost, mkPaperStand, mkBusStopPole }        from './utils/props.js';
 import { mkWall }                from './utils/wall.js';
 
+import {
+  mkRoadStraight, mkRoadIntersection, mkRoadTIntersection, mkRoadCorner,
+  mkFootpath, mkZebraCrossing, mkSpeedBump,
+  mkRoadDivider, mkGrassStrip, mkHedgeRow, mkBush, mkFlowerBed,
+  mkTrafficCone, mkRoadBarrier, mkBarrierRow,
+  mkManhole, mkCurbRow, mkGuardBooth, mkLaneArrow, mkRoundabout
+} from './utils/roads.js';
+
 
 // ── Apne custom buildings/objects import karo (examples) ──────────────────
  import { addHollowBuilding, addAdminBuilding, addRightBlock, addMainGate, addSportsCourt, addCanteen,createBuildings,  }     from './utils/buildings.js';
@@ -274,6 +282,182 @@ export const OBJECT_REGISTRY = [
     spawn: (x, z) => mkBusStopPole(x, z, 0),
     code:  (pos, rot) => `mkBusStopPole(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
   },
+
+
+// ────────────────────────────────────────────────────────────────────
+  // 🛣  ROADS
+  // ────────────────────────────────────────────────────────────────────
+  {
+    key:   'road_straight',
+    icon:  '🛣',
+    label: 'Road (Straight)',
+    group: 'Roads',
+    spawn: (x, z) => mkRoadStraight(x, z, 0),
+    code:  (pos, rot) => `mkRoadStraight(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'road_intersection',
+    icon:  '✛',
+    label: 'Road (4-Way)',
+    group: 'Roads',
+    spawn: (x, z) => mkRoadIntersection(x, z),
+    code:  (pos) => `mkRoadIntersection(${pos.x}, ${pos.z});`,
+  },
+  {
+    key:   'road_t_intersection',
+    icon:  '⊤',
+    label: 'Road (T-Junction)',
+    group: 'Roads',
+    spawn: (x, z) => mkRoadTIntersection(x, z, 0),
+    code:  (pos, rot) => `mkRoadTIntersection(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'road_corner',
+    icon:  '↰',
+    label: 'Road (Corner)',
+    group: 'Roads',
+    spawn: (x, z) => mkRoadCorner(x, z, 0),
+    code:  (pos, rot) => `mkRoadCorner(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'footpath',
+    icon:  '🚶',
+    label: 'Footpath',
+    group: 'Roads',
+    spawn: (x, z) => mkFootpath(x, z, 0),
+    code:  (pos, rot) => `mkFootpath(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'zebra_crossing',
+    icon:  '🦓',
+    label: 'Zebra Crossing',
+    group: 'Roads',
+    spawn: (x, z) => mkZebraCrossing(x, z, 0),
+    code:  (pos, rot) => `mkZebraCrossing(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'speed_bump',
+    icon:  '〰',
+    label: 'Speed Bump',
+    group: 'Roads',
+    spawn: (x, z) => mkSpeedBump(x, z, 0),
+    code:  (pos, rot) => `mkSpeedBump(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'road_divider',
+    icon:  '🌿',
+    label: 'Road Divider',
+    group: 'Roads',
+    spawn: (x, z) => mkRoadDivider(x, z, 0),
+    code:  (pos, rot) => `mkRoadDivider(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'roundabout',
+    icon:  '🔄',
+    label: 'Roundabout',
+    group: 'Roads',
+    spawn: (x, z) => mkRoundabout(x, z),
+    code:  (pos) => `mkRoundabout(${pos.x}, ${pos.z});`,
+  },
+  {
+    key:   'lane_arrow',
+    icon:  '⬆',
+    label: 'Lane Arrow',
+    group: 'Roads',
+    spawn: (x, z) => mkLaneArrow(x, z, 0),
+    code:  (pos, rot) => `mkLaneArrow(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'curb_row',
+    icon:  '🟥',
+    label: 'Curb (Red/White)',
+    group: 'Roads',
+    spawn: (x, z) => mkCurbRow(x, z, 0),
+    code:  (pos, rot) => `mkCurbRow(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'manhole',
+    icon:  '⭕',
+    label: 'Manhole Cover',
+    group: 'Roads',
+    spawn: (x, z) => mkManhole(x, z),
+    code:  (pos) => `mkManhole(${pos.x}, ${pos.z});`,
+  },
+ 
+  // ────────────────────────────────────────────────────────────────────
+  // 🌿  GREENERY
+  // ────────────────────────────────────────────────────────────────────
+  {
+    key:   'grass_strip',
+    icon:  '🌿',
+    label: 'Grass Strip',
+    group: 'Greenery',
+    spawn: (x, z) => mkGrassStrip(x, z, 0),
+    code:  (pos, rot) => `mkGrassStrip(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'hedge_row',
+    icon:  '🌳',
+    label: 'Hedge Row',
+    group: 'Greenery',
+    spawn: (x, z) => mkHedgeRow(x, z, 0),
+    code:  (pos, rot) => `mkHedgeRow(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'bush',
+    icon:  '🌿',
+    label: 'Bush',
+    group: 'Greenery',
+    spawn: (x, z) => mkBush(x, z, 1.0),
+    code:  (pos, rot, scale) => `mkBush(${pos.x}, ${pos.z}, ${scale.x.toFixed(2)});`,
+  },
+  {
+    key:   'flower_bed',
+    icon:  '🌸',
+    label: 'Flower Bed',
+    group: 'Greenery',
+    spawn: (x, z) => mkFlowerBed(x, z, 0),
+    code:  (pos, rot) => `mkFlowerBed(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+ 
+  // ────────────────────────────────────────────────────────────────────
+  // 🚧  ROAD SAFETY / BARRIERS
+  // ────────────────────────────────────────────────────────────────────
+  {
+    key:   'traffic_cone',
+    icon:  '🚧',
+    label: 'Traffic Cone',
+    group: 'Safety',
+    spawn: (x, z) => mkTrafficCone(x, z),
+    code:  (pos) => `mkTrafficCone(${pos.x}, ${pos.z});`,
+  },
+  {
+    key:   'road_barrier',
+    icon:  '🚧',
+    label: 'Jersey Barrier',
+    group: 'Safety',
+    spawn: (x, z) => mkRoadBarrier(x, z, 0),
+    code:  (pos, rot) => `mkRoadBarrier(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'barrier_row',
+    icon:  '🚧',
+    label: 'Barrier Row (x4)',
+    group: 'Safety',
+    spawn: (x, z) => mkBarrierRow(x, z, 0),
+    code:  (pos, rot) => `mkBarrierRow(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+  {
+    key:   'guard_booth',
+    icon:  '🛂',
+    label: 'Guard Booth',
+    group: 'Safety',
+    spawn: (x, z) => mkGuardBooth(x, z, 0),
+    code:  (pos, rot) => `mkGuardBooth(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+
+
+
   // ──────────────────────────────────────────────────────────────────────────
   // 🚗  VEHICLES
   // ──────────────────────────────────────────────────────────────────────────
