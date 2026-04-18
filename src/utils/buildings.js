@@ -712,3 +712,4 @@ export function createBuildings() {
   // ── Canteen  (behind right block)
   addCanteen(g, 88, -28);
 }
+

@@ -13,6 +13,8 @@
  * ║    code   → (pos, rot, scale) => string  generates save code            ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
+import * as THREE from 'three';
+import { scene } from './scene.js';
 
 // ── Apne utility/builder functions yahan import karo ──────────────────────
 import { mkGulmohar, mkPeepal, mkNeem, mkMango, mkPalm, mkBamboo, mkAshoka, mkBanyan}  from './utils/trees.js';
@@ -318,48 +320,80 @@ export const OBJECT_REGISTRY = [
     icon: '🏠',
     label: 'Hollow Building',
     group: 'Buildings',
-    spawn: (x, z) => addHollowBuilding(x, z),
-    code: (pos) => `addHollowBuilding(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      // Provide default dimensions for a hollow building (e.g., ow=72, od=55, ww=11, floors=4)
+      addHollowBuilding(g, x, z, 72, 55, 11, 4, { name: 'Hollow Building' });
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addHollowBuilding(g, ${pos.x}, ${pos.z}, 72, 55, 11, 4);`,
   },
-  {
+
+    {
     key: 'admin_building',
     icon: '🏢',
     label: 'Admin Building',
     group: 'Buildings',
-    spawn: (x, z) => addAdminBuilding(x, z),
-    code: (pos) => `addAdminBuilding(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addAdminBuilding(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addAdminBuilding(g, ${pos.x}, ${pos.z});`,
   },
-  {
+    {
     key: 'right_block',
-    icon: '🏬',
+    icon: '🏢',
     label: 'Right Block',
     group: 'Buildings',
-    spawn: (x, z) => addRightBlock(x, z),
-    code: (pos) => `addRightBlock(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addRightBlock(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addRightBlock(g, ${pos.x}, ${pos.z});`,
   },
-  {
+    {
     key: 'main_gate',
     icon: '🚪',
     label: 'Main Gate',
     group: 'Buildings',
-    spawn: (x, z) => addMainGate(x, z),
-    code: (pos) => `addMainGate(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addMainGate(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addMainGate(g, ${pos.x}, ${pos.z});`,
   },
-  {
+    {
     key: 'sports_court',
     icon: '🏀',
     label: 'Sports Court',
     group: 'Buildings',
-    spawn: (x, z) => addSportsCourt(x, z),
-    code: (pos) => `addSportsCourt(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addSportsCourt(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addSportsCourt(g, ${pos.x}, ${pos.z});`,
   },
-  {
+    {
     key: 'canteen',
     icon: '🍽',
     label: 'Canteen',
     group: 'Buildings',
-    spawn: (x, z) => addCanteen(x, z),
-    code: (pos) => `addCanteen(${pos.x}, ${pos.z});`,
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addCanteen(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addCanteen(g, ${pos.x}, ${pos.z});`,
   },
 
   // ──────────────────────────────────────────────────────────────────────────
