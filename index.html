@@ -181,6 +181,275 @@
         font-size: 13px;
         color: #88aacc;
       }
+
+      /* ── Play button ─────────────────────────────────────────────────────── */
+      #player-btn {
+        position: absolute;
+        bottom: 52px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: linear-gradient(135deg, #1a3a8a 0%, #2255cc 100%);
+        color: #fff;
+        padding: 12px 28px;
+        border-radius: 40px;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        pointer-events: all;
+        border: none;
+        box-shadow:
+          0 4px 24px rgba(30, 80, 200, 0.55),
+          0 0 0 1px rgba(255,255,255,0.12) inset;
+        transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+        user-select: none;
+      }
+      #player-btn:hover {
+        transform: translateX(-50%) translateY(-2px) scale(1.03);
+        box-shadow:
+          0 8px 32px rgba(30, 80, 200, 0.65),
+          0 0 0 1px rgba(255,255,255,0.18) inset;
+        filter: brightness(1.1);
+      }
+      #player-btn:active {
+        transform: translateX(-50%) scale(0.97);
+      }
+      #player-btn .play-icon {
+        width: 28px;
+        height: 28px;
+        background: rgba(255,255,255,0.18);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+      }
+      #player-btn .play-pulse {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 40px;
+        border: 2px solid rgba(100,160,255,0.4);
+        animation: pulse-ring 2s cubic-bezier(0.4,0,0.6,1) infinite;
+      }
+      @keyframes pulse-ring {
+        0%   { transform: scale(1);    opacity: 0.6; }
+        70%  { transform: scale(1.12); opacity: 0;   }
+        100% { transform: scale(1.12); opacity: 0;   }
+      }
+
+      /* ── Player HUD (shown only in player mode) ──────────────────────────── */
+      #player-hud {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Crosshair */
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 22px;
+        height: 22px;
+        pointer-events: none;
+      }
+      #crosshair::before,
+      #crosshair::after {
+        content: '';
+        position: absolute;
+        background: rgba(255,255,255,0.85);
+        border-radius: 2px;
+        box-shadow: 0 0 4px rgba(0,0,0,0.6);
+      }
+      #crosshair::before {
+        width: 2px;
+        height: 22px;
+        top: 0;
+        left: 10px;
+      }
+      #crosshair::after {
+        width: 22px;
+        height: 2px;
+        top: 10px;
+        left: 0;
+      }
+      #crosshair .dot {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: rgba(255,255,255,0.95);
+        border-radius: 50%;
+        top: 9px;
+        left: 9px;
+        box-shadow: 0 0 6px rgba(100,180,255,0.8);
+      }
+
+      /* Exit & controls hint bar */
+      #player-bar {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.60);
+        backdrop-filter: blur(6px);
+        color: rgba(255,255,255,0.82);
+        padding: 7px 20px;
+        border-radius: 20px;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid rgba(255,255,255,0.10);
+        pointer-events: all;
+        white-space: nowrap;
+      }
+      #player-bar kbd {
+        background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-size: 10px;
+        font-family: inherit;
+        color: #fff;
+      }
+      #exit-btn {
+        background: rgba(200,50,50,0.55);
+        border: 1px solid rgba(255,100,100,0.4);
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 10px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.15s;
+        pointer-events: all;
+      }
+      #exit-btn:hover {
+        background: rgba(200,50,50,0.8);
+      }
+
+      /* Speed indicator */
+      #speed-badge {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: rgba(0,0,0,0.5);
+        color: rgba(255,255,255,0.75);
+        padding: 5px 12px;
+        border-radius: 10px;
+        font-size: 11px;
+        border: 1px solid rgba(255,255,255,0.12);
+        letter-spacing: 0.3px;
+      }
+
+      /* Pointer-lock overlay (shown when not locked) */
+      #lock-overlay {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(8px);
+        color: #fff;
+        padding: 18px 32px;
+        border-radius: 16px;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.15);
+        pointer-events: none;
+      }
+      #lock-overlay .lock-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+      #lock-overlay p {
+        font-size: 13px;
+        color: rgba(255,255,255,0.75);
+      }
+
+      /* ── Mobile controls ─────────────────────────────────────────────────── */
+      #mobile-controls {
+        display: none;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 16px;
+        pointer-events: none;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+      @media (pointer: coarse) {
+        #mobile-controls {
+          display: flex !important;
+        }
+      }
+      #mobile-joy-wrap {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        pointer-events: all;
+      }
+      #mobile-joy {
+        width: 120px;
+        height: 120px;
+        background: rgba(255,255,255,0.10);
+        border: 2px solid rgba(255,255,255,0.25);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #mobile-joy-knob {
+        width: 48px;
+        height: 48px;
+        background: rgba(255,255,255,0.35);
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,0.5);
+        transition: none;
+        pointer-events: none;
+      }
+      #mobile-jump {
+        width: 72px;
+        height: 72px;
+        background: rgba(30, 80, 200, 0.55);
+        border: 2px solid rgba(100,160,255,0.5);
+        border-radius: 50%;
+        color: #fff;
+        font-size: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: all;
+        user-select: none;
+      }
+      #mobile-sprint {
+        width: 58px;
+        height: 58px;
+        background: rgba(200, 120, 20, 0.55);
+        border: 2px solid rgba(255,180,60,0.5);
+        border-radius: 50%;
+        color: #fff;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: all;
+        user-select: none;
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
@@ -188,32 +457,75 @@
       <h2>🏛 Building PTSNS University...</h2>
       <p>Constructing 3D campus of Shahdol</p>
     </div>
+
     <canvas id="c"></canvas>
+
     <div id="ui">
       <div id="title">
         🏛 Pandit Shambhunath Shukla University &nbsp;<span>Shahdol, M.P.</span>
       </div>
+
       <div id="compass">
         <div class="cn">↑</div>
         <div>N</div>
       </div>
+
       <div id="panel">
         <div id="panel-icon">🏢</div>
         <div id="panel-name">Building</div>
         <div id="panel-desc">Description</div>
         <button id="panel-close">Close ✕</button>
       </div>
+
       <div id="hint">
-        🖱 Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click
-        buildings for info
+        🖱 Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click buildings for info
       </div>
+
       <div id="legend">
         <div class="lb">Academic Buildings</div>
         <div class="lg">Green Spaces &amp; Sports</div>
         <div class="ly">Residential &amp; Hostel</div>
         <div class="lr">Services &amp; Facilities</div>
       </div>
+
+      <button id="player-btn" title="Enter Campus Walk Mode">
+        <span class="play-pulse"></span>
+        <span class="play-icon">▶</span>
+        Campus Walk Mode
+      </button>
+
+      <div id="player-hud">
+        <div id="crosshair"><span class="dot"></span></div>
+
+        <div id="speed-badge">🚶 Walking</div>
+
+        <div id="player-bar">
+          <span><kbd>W A S D</kbd> Move</span>
+          <span><kbd>Mouse</kbd> Look</span>
+          <span><kbd>Space</kbd> Jump</span>
+          <span><kbd>Shift</kbd> Run</span>
+          <button id="exit-btn">✕ Exit Walk</button>
+        </div>
+
+        <div id="lock-overlay">
+          <div class="lock-icon">🖱</div>
+          <p>Click to look around</p>
+        </div>
+
+        <div id="mobile-controls">
+          <div id="mobile-joy-wrap">
+            <div id="mobile-joy">
+              <div id="mobile-joy-knob"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+            <button id="mobile-sprint">⚡</button>
+            <button id="mobile-jump">↑</button>
+          </div>
+        </div>
+      </div>
     </div>
+
     <script type="importmap">
       {
         "imports": {

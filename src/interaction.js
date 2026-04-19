@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { camera } from './scene.js';
 import { clickable } from './utils/buildings.js';
+import { isPlayerActive } from './player.js';
 
 const raycaster = new THREE.Raycaster();
 const mouseVec = new THREE.Vector2();

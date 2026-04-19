@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { resizeRenderer, camera, scene, controls } from './scene.js';
-import { createGround }    from './world/ground.js';
-import { createRoads }     from './world/roads.js';
-import { createParking }   from './world/parking.js';
+import { createGround } from './world/ground.js';
+import { createRoads } from './world/roads.js';
+import { createParking } from './world/parking.js';
 import { createBuildings } from './utils/buildings.js';
-import { createGate }      from './world/gate.js';
+import { createGate } from './world/gate.js';
 import { mkGulmohar, mkPeepal } from './utils/trees.js';
-import { mkStreetLight }   from './utils/lights.js';
-import { mkBench, mkCar }  from './utils/props.js';
+import { mkStreetLight } from './utils/lights.js';
+import { mkBench, mkCar } from './utils/props.js';
 import { setupInteraction } from './interaction.js';
-import { animate }         from './animate.js';
-import { mkPlane }         from './helpers.js';
-import { mkWall }          from './utils/wall.js';
-import { createBoundary }  from './world/boundary.js';
-import { initDevTool, updateDevTool } from './devtool.js';  // ← DevTool
+import { animate } from './animate.js';
+import { mkPlane } from './helpers.js';
+import { mkWall } from './utils/wall.js';
+import { createBoundary } from './world/boundary.js';
+import { initDevTool } from './devtool.js';
+import { initPlayer, enterPlayerMode, exitPlayerMode, isPlayerActive } from './player.js';
 
 // ─── World ───────────────────────────────────────────────────────────────────
 createGround();
@@ -34,26 +35,81 @@ createGround();
 // createBuildings();
 // createGate();
 
-
-
 // ── DevTool Generated Objects START ──
 // (Objects placed with the devtool will appear here after "Save to File")
 // ── DevTool Generated Objects END ──
 
 // ─── Interaction & Loop ──────────────────────────────────────────────────────
 setupInteraction();
+initPlayer();
 
 window.addEventListener('resize', resizeRenderer);
 
-// NOTE: In animate.js, call updateDevTool() each frame:
-//
-//   import { updateDevTool } from './devtool.js';
-//
-//   export function animate() {
-//     requestAnimationFrame(animate);
-//     updateDevTool();           // ← add this
-//     renderer.render(scene, camera);
-//   }
+// Player buttons
+const playerBtn = document.getElementById('player-btn');
+const exitBtn = document.getElementById('exit-btn');
 
-initDevTool(); // ← starts the devtool UI & event listeners
+playerBtn?.addEventListener('click', () => {
+  enterPlayerMode();
+  if (controls) controls.enabled = false;
+});
+
+exitBtn?.addEventListener('click', () => {
+  exitPlayerMode();
+  if (controls) controls.enabled = true;
+});
+
+// Speed badge update
+window.addEventListener('keydown', (e) => {
+  if (!isPlayerActive()) return;
+
+  const badge = document.getElementById('speed-badge');
+  if (!badge) return;
+
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    badge.textContent = '🏃 Running';
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (!isPlayerActive()) return;
+
+  const badge = document.getElementById('speed-badge');
+  if (!badge) return;
+
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    badge.textContent = '🚶 Walking';
+  }
+});
+
+// Pointer lock overlay
+document.addEventListener('pointerlockchange', () => {
+  const overlay = document.getElementById('lock-overlay');
+  if (!overlay) return;
+
+  const locked = !!(
+    document.pointerLockElement ||
+    document.mozPointerLockElement ||
+    document.webkitPointerLockElement
+  );
+
+  overlay.style.display = isPlayerActive() && !locked ? 'block' : 'none';
+});
+
+// Mobile sprint button
+const sprintBtn = document.getElementById('mobile-sprint');
+sprintBtn?.addEventListener(
+  'touchstart',
+  (e) => {
+    e.preventDefault();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft' }));
+  },
+  { passive: false }
+);
+
+sprintBtn?.addEventListener('touchend', () => {
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft' }));
+});
+
+initDevTool();
 animate();
