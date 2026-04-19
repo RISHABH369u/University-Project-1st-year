@@ -37,7 +37,7 @@ import {
 
 
 // ── Apne custom buildings/objects import karo (examples) ──────────────────
- import { addHollowBuilding, addAdminBuilding, addRightBlock, addMainGate, addSportsCourt, addCanteen,createBuildings,  }     from './utils/buildings.js';
+ import { addHollowBuilding, addAdminBuilding, addRightBlock, addMainGate, addSportsCourt, addCanteen,createBuildings, addMainAcademicBlock }     from './utils/buildings.js';
 // import { mkBus, mkTruck, mkScooter }     from './utils/vehicles.js';
 // import { mkLamp, mkSignBoard, mkFence }  from './utils/street.js';
 // import { mkPark, mkFountain, mkBench2 }  from './utils/park.js';
@@ -579,7 +579,19 @@ export const OBJECT_REGISTRY = [
     },
     code: (pos) => `addHollowBuilding(g, ${pos.x}, ${pos.z}, 72, 55, 11, 4);`,
   },
-
+    {
+    key: 'main_academic_block',
+    icon: '🏫',
+    label: 'Main Academic Block',
+    group: 'Buildings',
+    spawn: (x, z) => {
+      const g = new THREE.Group();
+      addMainAcademicBlock(g, x, z);
+      scene.add(g);
+      return g;
+    },
+    code: (pos) => `addMainAcademicBlock(g, ${pos.x}, ${pos.z});`,
+  },
     {
     key: 'admin_building',
     icon: '🏢',

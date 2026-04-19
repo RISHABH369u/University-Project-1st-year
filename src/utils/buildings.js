@@ -373,6 +373,428 @@ export function addHollowBuilding(g, cx, cz, ow, od, ww, floors, meta={}) {
 
 }
 
+export function addMainAcademicBlock(parent, cx, cz) {
+  const g = new THREE.Group();
+  parent.add(g);
+
+  // ── Local materials (tuned to the photo) ─────────────────────────
+  const wallM    = new THREE.MeshLambertMaterial({ color: 0xeae6dc }); // off-white concrete
+  const wallSdM  = new THREE.MeshLambertMaterial({ color: 0xd8d3c6 }); // shadowed plane
+  const pilM     = new THREE.MeshLambertMaterial({ color: 0xf6f2e8 }); // bright pilaster
+  const slabM    = new THREE.MeshLambertMaterial({ color: 0xb8b4a8 }); // grey floor band
+  const parapetM = new THREE.MeshLambertMaterial({ color: 0xe2dccf });
+  const winM     = new THREE.MeshLambertMaterial({
+    color: 0x6f9bb8, transparent: true, opacity: 0.78,
+    emissive: 0x132538, emissiveIntensity: 0.18,
+  });
+  const curtainM = new THREE.MeshLambertMaterial({
+    color: 0x223a55, transparent: true, opacity: 0.85,
+    emissive: 0x0a1726, emissiveIntensity: 0.35,
+  });
+  const mullionM = new THREE.MeshLambertMaterial({ color: 0x9c9a92 });
+  const concM    = new THREE.MeshLambertMaterial({ color: 0xc6c2b8 });
+  const tileM    = new THREE.MeshLambertMaterial({ color: 0xd2cdc0 });
+  const pathM    = new THREE.MeshLambertMaterial({ color: 0xb9b3a4 });
+  const grassM   = new THREE.MeshLambertMaterial({ color: 0x4a7a3a });
+  const blueSign = new THREE.MeshLambertMaterial({ color: 0x1f4f95 });
+  const solarM   = new THREE.MeshLambertMaterial({
+    color: 0x152030, emissive: 0x05101c, emissiveIntensity: 0.5,
+  });
+  const sFrameM  = new THREE.MeshLambertMaterial({ color: 0x6e6e66 });
+  const tankM    = new THREE.MeshLambertMaterial({ color: 0x8a8a82 });
+  const steelM   = new THREE.MeshLambertMaterial({ color: 0x8c8c84 });
+  const roofM    = new THREE.MeshLambertMaterial({ color: 0xa8a59c });
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  const bx = (w, h, d, m) => {
+    const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    me.castShadow = me.receiveShadow = true; return me;
+  };
+  const cy = (rt, rb, h, s, m) => {
+    const me = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, s), m);
+    me.castShadow = me.receiveShadow = true; return me;
+  };
+  const place = (mesh, x, y, z, ry = 0) => {
+    mesh.position.set(x, y, z);
+    if (ry) mesh.rotation.y = ry;
+    g.add(mesh); return mesh;
+  };
+
+  // ── Master dimensions (scaled down for game-feel from ~200×110 m) ─
+  // Real ~200 × 110, but for camera/walking we use ~120 × 78
+  const OW   = 120;        // outer width  (X)
+  const OD   = 78;         // outer depth  (Z)
+  const WW   = 12;         // wing depth (one side)
+  const FLR  = 4;          // floors
+  const FH   = 3.6;        // floor height
+  const H    = FLR * FH;   // total wall height
+  const iW   = OW - WW * 2;
+  const iD   = OD - WW * 2;
+
+  const SOUTH = cz - OD / 2;
+  const NORTH = cz + OD / 2;
+  const WEST  = cx - OW / 2;
+  const EAST  = cx + OW / 2;
+
+  // ── Bay geometry (PAIRED windows per bay, repeated) ───────────────
+  // Each bay: 4.0 m wide. Inside bay → 2 narrow windows (1.2 m each)
+  // Pilaster strip between bays: 0.45 m wide, full height
+  const BAY = 4.0;
+  const WIN_W = 1.15;
+  const WIN_H = 1.55;
+  const WIN_GAP = 0.45;       // gap between the paired windows
+  const SILL = 1.05;          // sill height above floor
+  const PIL_W = 0.45;
+  const PIL_DP = 0.18;        // how far pilaster sticks proud of wall
+
+  // Build a single facade panel along an axis, filled with paired-window bays
+  // axis: 'x' (wall runs in X, normal is ±Z) or 'z' (wall runs Z, normal ±X)
+  // wallP: perpendicular position of the wall plane
+  // span:  total length of facade
+  // center: centre coord along the axis
+  // sign: +1 = facing outward in +Z/+X, -1 = facing -Z/-X
+  // skipZones: array of {c, half} ranges along the axis to leave clear
+  function facade(axis, wallP, center, span, sign, skipZones = []) {
+    const nBays = Math.floor(span / BAY);
+    const realBay = span / nBays;
+    for (let i = 0; i < nBays; i++) {
+      const t = center - span / 2 + realBay * (i + 0.5);
+      // Pilaster between bays (skip first to align)
+      if (i > 0) {
+        const pt = center - span / 2 + realBay * i;
+        const pilOX = axis === 'x' ? 0 : sign * PIL_DP * 0.5;
+        const pilOZ = axis === 'x' ? sign * PIL_DP * 0.5 : 0;
+        const pil = bx(
+          axis === 'x' ? PIL_W : PIL_DP,
+          H + 0.6,
+          axis === 'x' ? PIL_DP : PIL_W,
+          pilM
+        );
+        const px = axis === 'x' ? pt : wallP + pilOX;
+        const pz = axis === 'x' ? wallP + pilOZ : pt;
+        place(pil, px, H / 2, pz);
+      }
+
+      const inSkip = skipZones.some(s => Math.abs(t - s.c) < s.half);
+      if (inSkip) continue;
+
+      // Paired windows on every floor of this bay
+      for (let f = 0; f < FLR; f++) {
+        const wy = f * FH + SILL + WIN_H / 2;
+        for (const off of [-1, +1]) {
+          const dx = off * (WIN_GAP / 2 + WIN_W / 2);
+          const wx = axis === 'x' ? t + dx : wallP + sign * 0.06;
+          const wz = axis === 'x' ? wallP + sign * 0.06 : t + dx;
+          const win = new THREE.Mesh(
+            new THREE.PlaneGeometry(WIN_W, WIN_H), winM
+          );
+          win.rotation.y = axis === 'x'
+            ? (sign > 0 ? 0 : Math.PI)
+            : (sign > 0 ? Math.PI / 2 : -Math.PI / 2);
+          place(win, wx, wy, wz);
+
+          // Window concrete frame (slightly proud)
+          const fr = bx(
+            axis === 'x' ? WIN_W + 0.18 : 0.05,
+            WIN_H + 0.18,
+            axis === 'x' ? 0.05 : WIN_W + 0.18,
+            pilM
+          );
+          place(fr,
+            axis === 'x' ? t + dx : wallP + sign * 0.03,
+            wy,
+            axis === 'x' ? wallP + sign * 0.03 : t + dx);
+
+          // Small chajja sun-shade above each window
+          const ch = bx(
+            axis === 'x' ? WIN_W + 0.3 : 0.32,
+            0.07,
+            axis === 'x' ? 0.32 : WIN_W + 0.3,
+            slabM
+          );
+          place(ch,
+            axis === 'x' ? t + dx : wallP + sign * 0.18,
+            wy + WIN_H / 2 + 0.15,
+            axis === 'x' ? wallP + sign * 0.18 : t + dx);
+        }
+      }
+    }
+
+    // Horizontal floor slab band on every floor line
+    for (let f = 1; f <= FLR; f++) {
+      const y = f * FH;
+      const sl = bx(
+        axis === 'x' ? span + 0.4 : 0.3,
+        0.28,
+        axis === 'x' ? 0.3 : span + 0.4,
+        slabM
+      );
+      place(sl,
+        axis === 'x' ? center : wallP + sign * 0.12,
+        y,
+        axis === 'x' ? wallP + sign * 0.12 : center);
+    }
+  }
+
+  // ── 1. WALLS (4 wings forming the hollow rectangle) ──────────────
+  // South wing
+  place(bx(OW, H, WW, wallM), cx, H / 2, SOUTH + WW / 2);
+  // North wing
+  place(bx(OW, H, WW, wallM), cx, H / 2, NORTH - WW / 2);
+  // West wing (between south and north wings, so length = iD)
+  place(bx(WW, H, iD, wallM), WEST + WW / 2, H / 2, cz);
+  // East wing
+  place(bx(WW, H, iD, wallM), EAST - WW / 2, H / 2, cz);
+
+  // ── 2. ENTRANCE BAY (left of centre on south face) ───────────────
+  // Glass curtain wall, 7 m wide, full height, with porch in front
+  const ENT_W = 7.0;
+  const ENT_X = cx - 16;            // off-centre LEFT, matches photo
+  const ENT_Z = SOUTH;
+
+  // Cut visual: place a tall dark glass plane on the south face
+  const curtain = bx(ENT_W, H - 0.2, 0.18, curtainM);
+  place(curtain, ENT_X, H / 2, ENT_Z + 0.02);
+
+  // Vertical mullions on the curtain wall (5 mullions)
+  for (let i = 0; i <= 5; i++) {
+    const mx = ENT_X - ENT_W / 2 + (ENT_W / 5) * i;
+    place(bx(0.12, H - 0.2, 0.22, mullionM), mx, H / 2, ENT_Z + 0.05);
+  }
+  // Horizontal mullions at each floor line
+  for (let f = 1; f < FLR; f++) {
+    place(bx(ENT_W, 0.12, 0.22, mullionM), ENT_X, f * FH, ENT_Z + 0.05);
+  }
+  // Heavy concrete frame around the curtain wall
+  place(bx(ENT_W + 0.6, 0.4, 0.28, pilM), ENT_X, H - 0.05, ENT_Z + 0.06);
+  place(bx(0.4, H + 0.2, 0.28, pilM), ENT_X - ENT_W / 2 - 0.2, H / 2, ENT_Z + 0.06);
+  place(bx(0.4, H + 0.2, 0.28, pilM), ENT_X + ENT_W / 2 + 0.2, H / 2, ENT_Z + 0.06);
+
+  // ── Covered porch in front of entrance ───────────────────────────
+  const PORCH_W = ENT_W + 4;
+  const PORCH_D = 4.2;
+  const PORCH_H = FH * 1.05;
+  // Porch slab roof
+  place(bx(PORCH_W + 0.4, 0.32, PORCH_D, slabM),
+    ENT_X, PORCH_H, ENT_Z - PORCH_D / 2 + 0.1);
+  // Porch front edge thicker beam
+  place(bx(PORCH_W + 0.4, 0.55, 0.4, pilM),
+    ENT_X, PORCH_H - 0.05, ENT_Z - PORCH_D + 0.3);
+  // Porch columns (4 square columns)
+  for (const off of [-PORCH_W / 2 + 0.4, -PORCH_W / 6, PORCH_W / 6, PORCH_W / 2 - 0.4]) {
+    place(bx(0.45, PORCH_H, 0.45, pilM), ENT_X + off, PORCH_H / 2, ENT_Z - PORCH_D + 0.4);
+    place(bx(0.7, 0.3, 0.7, pilM), ENT_X + off, 0.15, ENT_Z - PORCH_D + 0.4);
+  }
+  // Blue "अकादमिक भवन" sign on the porch fascia
+  place(bx(5.0, 0.7, 0.18, blueSign),
+    ENT_X, PORCH_H - 0.6, ENT_Z - PORCH_D + 0.52);
+  // White inner stripe on sign
+  place(bx(4.6, 0.45, 0.04,
+    new THREE.MeshLambertMaterial({ color: 0xf5f0d8 })),
+    ENT_X, PORCH_H - 0.6, ENT_Z - PORCH_D + 0.62);
+
+  // Steps up to porch
+  for (let s = 0; s < 4; s++) {
+    place(bx(PORCH_W - s * 0.6, 0.17, 0.55, concM),
+      ENT_X, s * 0.17, ENT_Z - PORCH_D - 0.3 - s * 0.55);
+  }
+
+  // ── 3. SOUTH FACADE (skip the entrance bay zone) ─────────────────
+  facade('x', SOUTH, cx, OW, -1,
+    [{ c: ENT_X, half: ENT_W / 2 + 0.6 }]);
+
+  // ── 4. NORTH, WEST, EAST FACADES ─────────────────────────────────
+  facade('x', NORTH, cx, OW, +1);
+  facade('z', WEST,  cz, iD, -1);
+  facade('z', EAST,  cz, iD, +1);
+
+  // ── 5. INNER COURTYARD FACADES (simpler, single windows) ─────────
+  // Use single windows per bay on inner faces, upper floors only;
+  // ground floor is open verandah look.
+  function innerFacade(axis, wallP, center, span, sign) {
+    const nBays = Math.floor(span / BAY);
+    const realBay = span / nBays;
+    for (let i = 0; i < nBays; i++) {
+      const t = center - span / 2 + realBay * (i + 0.5);
+      for (let f = 1; f < FLR; f++) {
+        const wy = f * FH + SILL + WIN_H / 2;
+        const win = new THREE.Mesh(
+          new THREE.PlaneGeometry(WIN_W * 1.4, WIN_H), winM
+        );
+        win.rotation.y = axis === 'x'
+          ? (sign > 0 ? 0 : Math.PI)
+          : (sign > 0 ? Math.PI / 2 : -Math.PI / 2);
+        place(win,
+          axis === 'x' ? t : wallP + sign * 0.06,
+          wy,
+          axis === 'x' ? wallP + sign * 0.06 : t);
+      }
+    }
+    // Slabs on inner face too
+    for (let f = 1; f <= FLR; f++) {
+      const y = f * FH;
+      const sl = bx(
+        axis === 'x' ? span + 0.4 : 0.3,
+        0.22,
+        axis === 'x' ? 0.3 : span + 0.4,
+        slabM
+      );
+      place(sl,
+        axis === 'x' ? center : wallP + sign * 0.12,
+        y,
+        axis === 'x' ? wallP + sign * 0.12 : center);
+    }
+  }
+  innerFacade('x', SOUTH + WW, cx, OW - WW * 0.4, +1);
+  innerFacade('x', NORTH - WW, cx, OW - WW * 0.4, -1);
+  innerFacade('z', WEST  + WW, cz, iD, +1);
+  innerFacade('z', EAST  - WW, cz, iD, -1);
+
+  // ── 6. INNER GROUND-FLOOR VERANDAH COLUMNS ───────────────────────
+  function verandah(axis, linePos, center, span) {
+    const n = Math.floor(span / 4.5);
+    const sp = span / n;
+    for (let i = 0; i <= n; i++) {
+      const t = center - span / 2 + sp * i;
+      const px = axis === 'x' ? t : linePos;
+      const pz = axis === 'x' ? linePos : t;
+      place(cy(0.22, 0.26, FH, 10, pilM), px, FH / 2, pz);
+      place(bx(0.55, 0.25, 0.55, pilM), px, 0.12, pz);
+      place(bx(0.55, 0.2,  0.55, pilM), px, FH - 0.1, pz);
+    }
+  }
+  verandah('x', SOUTH + WW + 0.6, cx, iW);
+  verandah('x', NORTH - WW - 0.6, cx, iW);
+  verandah('z', WEST  + WW + 0.6, cz, iD);
+  verandah('z', EAST  - WW - 0.6, cz, iD);
+
+  // ── 7. PARAPETS on every wing roof ────────────────────────────────
+  function parapet(axis, linePos, center, span, sign) {
+    const pH = 0.95;
+    const wall = bx(
+      axis === 'x' ? span + 0.4 : 0.22,
+      pH,
+      axis === 'x' ? 0.22 : span + 0.4,
+      parapetM
+    );
+    place(wall,
+      axis === 'x' ? center : linePos + sign * 0.11,
+      H + pH / 2 + 0.3,
+      axis === 'x' ? linePos + sign * 0.11 : center);
+  }
+  parapet('x', SOUTH,        cx, OW, -1);
+  parapet('x', NORTH,        cx, OW, +1);
+  parapet('x', SOUTH + WW,   cx, OW, +1);  // inner
+  parapet('x', NORTH - WW,   cx, OW, -1);
+  parapet('z', WEST,         cz, OD, -1);
+  parapet('z', EAST,         cz, OD, +1);
+
+  // Roof slab on each wing
+  place(bx(OW + 0.5, 0.3, WW + 0.4, roofM), cx, H + 0.15, SOUTH + WW / 2);
+  place(bx(OW + 0.5, 0.3, WW + 0.4, roofM), cx, H + 0.15, NORTH - WW / 2);
+  place(bx(WW + 0.4, 0.3, iD + 0.4, roofM), WEST + WW / 2, H + 0.15, cz);
+  place(bx(WW + 0.4, 0.3, iD + 0.4, roofM), EAST - WW / 2, H + 0.15, cz);
+
+  // ── 8. SOLAR PANEL FARMS on every wing rooftop ───────────────────
+  function solarFarm(rx, rz, rw, rd) {
+    const PW2 = 1.55, PD2 = 0.95;
+    const cols = Math.floor((rw - 1.0) / 1.75);
+    const rows = Math.floor((rd - 0.8) / 1.15);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const px = rx - rw / 2 + 0.9 + c * 1.75;
+      const pz = rz - rd / 2 + 0.6 + r * 1.15;
+      const panel = bx(PW2, 0.05, PD2, solarM);
+      panel.rotation.x = -0.22;
+      panel.position.set(px, H + 1.1, pz);
+      g.add(panel);
+      const fr = bx(PW2 + 0.06, 0.03, PD2 + 0.06, sFrameM);
+      fr.rotation.x = -0.22;
+      fr.position.set(px, H + 1.07, pz);
+      g.add(fr);
+      // Mounting legs
+      place(cy(0.04, 0.04, 0.7, 4, sFrameM), px - PW2 / 2, H + 0.65, pz + PD2 / 2);
+      place(cy(0.04, 0.04, 0.7, 4, sFrameM), px + PW2 / 2, H + 0.65, pz + PD2 / 2);
+    }
+  }
+  solarFarm(cx, SOUTH + WW / 2, OW - 1.5, WW - 1.0);
+  solarFarm(cx, NORTH - WW / 2, OW - 1.5, WW - 1.0);
+  solarFarm(WEST + WW / 2, cz, WW - 1.0, iD - 1.0);
+  solarFarm(EAST - WW / 2, cz, WW - 1.0, iD - 1.0);
+
+  // ── 9. STAIR / LIFT TOWER (rises above roof, centre-left) ────────
+  const TOW_W = 6, TOW_D = 5, TOW_H = FH * 1.6;
+  const TOW_X = cx - 8, TOW_Z = NORTH - WW / 2;
+  place(bx(TOW_W, TOW_H, TOW_D, wallM), TOW_X, H + TOW_H / 2, TOW_Z);
+  place(bx(TOW_W + 0.5, 0.35, TOW_D + 0.5, roofM), TOW_X, H + TOW_H + 0.18, TOW_Z);
+  // Tower windows
+  for (let f = 0; f < 2; f++) {
+    const wy = H + 1.0 + f * 2.0;
+    place(bx(1.0, 1.4, 0.05, winM), TOW_X - 1.5, wy, TOW_Z + TOW_D / 2 + 0.06);
+    place(bx(1.0, 1.4, 0.05, winM), TOW_X + 1.5, wy, TOW_Z + TOW_D / 2 + 0.06);
+  }
+  // Water tank on top of tower
+  place(cy(1.1, 1.1, 1.9, 12, tankM), TOW_X, H + TOW_H + 1.15, TOW_Z);
+  place(cy(1.22, 1.22, 0.18, 12, steelM), TOW_X, H + TOW_H + 2.15, TOW_Z);
+  for (let i = 0; i < 4; i++) {
+    place(cy(0.05, 0.05, 1.1, 4, steelM),
+      TOW_X + Math.cos(i * Math.PI / 2) * 0.85,
+      H + TOW_H + 0.6,
+      TOW_Z + Math.sin(i * Math.PI / 2) * 0.85);
+  }
+  // Antenna mast on roof
+  place(cy(0.05, 0.05, 4.2, 6, steelM), TOW_X + 1.2, H + TOW_H + 2.2, TOW_Z - 0.3);
+
+  // ── 10. PLINTHS around base ───────────────────────────────────────
+  place(bx(OW + 0.8, 0.5, WW + 0.8, concM), cx, 0.25, SOUTH + WW / 2);
+  place(bx(OW + 0.8, 0.5, WW + 0.8, concM), cx, 0.25, NORTH - WW / 2);
+  place(bx(WW + 0.8, 0.5, iD + 0.8, concM), WEST + WW / 2, 0.25, cz);
+  place(bx(WW + 0.8, 0.5, iD + 0.8, concM), EAST - WW / 2, 0.25, cz);
+
+  // ── 11. COURTYARD: lawn quadrants + cross paths + central feature ─
+  // Base lawn
+  place(bx(iW, 0.06, iD, grassM), cx, 0.06, cz);
+  // Cross paths (concrete)
+  place(bx(iW, 0.08, 2.4, pathM), cx, 0.08, cz);   // E-W path
+  place(bx(2.4, 0.08, iD, pathM), cx, 0.08, cz);   // N-S path
+  // Diagonal accent paths to corners
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const dp = bx(Math.hypot(iW, iD) * 0.45, 0.08, 1.2, pathM);
+    dp.position.set(cx + sx * iW * 0.18, 0.085, cz + sz * iD * 0.18);
+    dp.rotation.y = Math.atan2(sz * iD, sx * iW);
+    g.add(dp);
+  }
+  // Central round feature (planter / fountain base)
+  place(cy(2.2, 2.4, 0.45, 24, pathM), cx, 0.22, cz);
+  place(cy(2.0, 2.0, 0.18, 24, grassM), cx, 0.5, cz);
+  place(cy(0.18, 0.18, 1.4, 8, steelM), cx, 1.2, cz);
+  place(cy(0.5, 0.05, 0.05, 12, pilM), cx, 1.92, cz);
+
+  // ── 12. CLICKABLE PHANTOM ─────────────────────────────────────────
+  const ph = bx(OW, 0.1, OD,
+    new THREE.MeshBasicMaterial({ visible: false }));
+  ph.position.set(cx, H + 0.5, cz);
+  ph.userData = {
+    name: 'Main Academic Block — अकादमिक भवन',
+    icon: '🎓',
+    desc: 'G+3 hollow quadrangle. Arts, Commerce & Science departments, ' +
+          'lecture halls, dean\'s office. Glass-front entrance lobby with ' +
+          'covered porch, central courtyard, full rooftop solar array.',
+  };
+  g.add(ph);
+  if (typeof clickable !== 'undefined') clickable.push(ph);
+}
+
+/* ── In createBuildings(), REPLACE the old block with: ─────────────
+ *
+ *    addMainAcademicBlock(scene, 0, 0);
+ *
+ * Remove (or comment out) the previous addHollowBuilding(...) call
+ * for the main academic block. Keep addAdminBuilding, addRightBlock,
+ * addSportsCourt, addCanteen and addMainGate as-is.
+ * ────────────────────────────────────────────────────────────────── */
+
+
+
 // ═══════════════════════════════════════════════════════════════════
 //  ██████  L-SHAPED ADMIN BUILDING  ██████
 //  Accurate to satellite: two rectangular wings joined at one corner
