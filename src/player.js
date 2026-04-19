@@ -1,130 +1,93 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║  player.js  —  Third-person player mode for PTSNS Campus Tour   ║
- * ║                                                                  ║
- * ║  USAGE:                                                          ║
- * ║   import { initPlayer, updatePlayer, isPlayerActive,            ║
- * ║            enterPlayerMode, exitPlayerMode } from './player.js'; ║
- * ║                                                                  ║
- * ║  In main.js   → initPlayer();                                   ║
- * ║  In animate.js → if (isPlayerActive()) updatePlayer();          ║
+ * ║  player.js  —  Third-person player (improved anatomy)            ║
+ * ║  Same public API: initPlayer, updatePlayer, isPlayerActive,     ║
+ * ║                   enterPlayerMode, exitPlayerMode                ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
 import * as THREE from 'three';
 import { scene, camera } from './scene.js';
 
+// ── Tunables ──────────────────────────────────────────────────────────────
+const WALK_SPEED   = 0.20;
+const RUN_SPEED    = 0.50;
+const GRAVITY      = -0.028;
+const JUMP_VEL     = 0.38;
+const GROUND_Y     = 0.0;
+const CAM_HEIGHT   = 3.6;
+const CAM_DIST     = 6.2;
+const CAM_LERP     = 0.10;
+const HEAD_BOB_AMP = 0.055;
+const MAX_PITCH    =  0.55;
+const MIN_PITCH    = -0.42;
+const MOUSE_SENS   = 0.0028;
 
+// ── State ─────────────────────────────────────────────────────────────────
+let _active = false;
+let _yaw = Math.PI, _pitch = 0.18;
+let _velY = 0, _onGround = true;
+let _walkTime = 0, _bobTime = 0, _moving = false;
 
-// ── Constants ─────────────────────────────────────────────────────────────
-const WALK_SPEED    = 0.20;
-const RUN_SPEED     = 0.50;
-const GRAVITY       = -0.028;
-const JUMP_VEL      = 0.38;
-const GROUND_Y      = 0.0;
-const CAM_HEIGHT    = 3.6;     // camera Y above player feet
-const CAM_DIST      = 6.2;     // camera distance behind player
-const CAM_LERP      = 0.10;    // camera smooth follow (0=stiff,1=instant)
-const HEAD_BOB_AMP  = 0.055;
-const MAX_PITCH     = 0.55;    // look up/down limit (radians)
-const MIN_PITCH     = -0.42;
-const MOUSE_SENS    = 0.0028;
-
-// ── Runtime State ─────────────────────────────────────────────────────────
-let _active    = false;
-let _yaw       = Math.PI;   // character facing direction
-let _pitch     = 0.18;
-let _velY      = 0;
-let _onGround  = true;
-let _walkTime  = 0;
-let _bobTime   = 0;
-let _moving    = false;
-
-const _pos     = new THREE.Vector3(0, 0, 22);    // player world position
-const _camPos  = new THREE.Vector3();             // smooth camera position
+const _pos     = new THREE.Vector3(0, 0, 22);
+const _camPos  = new THREE.Vector3();
 const _camLook = new THREE.Vector3();
 
-const _keys = {
-  w: false, s: false, a: false, d: false,
-  space: false, shift: false,
-};
+const _keys = { w:false, s:false, a:false, d:false, space:false, shift:false };
 
 // ── Mesh handles ──────────────────────────────────────────────────────────
-let _root    = null;   // root group (moves + rotates)
-let _legL    = null;
-let _legR    = null;
-let _armL    = null;
-let _armR    = null;
+let _root = null;
+// Pivot groups (rotate from joint, geometry hangs below)
+let _legL, _legR, _kneeL, _kneeR;
+let _armL, _armR, _elbowL, _elbowR;
+let _head, _torso;
 
 // ─────────────────────────────────────────────────────────────────────────
-//  PUBLIC API
+// PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────
-
-export function initPlayer() {
-  _buildCharacter();
-  _bindKeys();
-}
-
+export function initPlayer() { _buildCharacter(); _bindKeys(); }
 export function isPlayerActive() { return _active; }
 
 export function enterPlayerMode() {
   _active = true;
   _root.visible = true;
-
-  // Reset position in front of gate
   _pos.set(0, 0, 22);
-  _yaw   = Math.PI;
-  _pitch = 0.18;
-  _velY  = 0;
-  _walkTime = 0;
-
+  _yaw = Math.PI; _pitch = 0.18; _velY = 0; _walkTime = 0;
   _camPos.set(
     _pos.x + Math.sin(_yaw) * CAM_DIST,
     _pos.y + CAM_HEIGHT,
     _pos.z + Math.cos(_yaw) * CAM_DIST
   );
-
-  document.getElementById('player-hud').style.display = 'flex';
-  document.getElementById('player-btn').style.display = 'none';
-  document.getElementById('hint').style.display       = 'none';
-  document.getElementById('legend').style.display     = 'none';
-  document.getElementById('compass').style.display    = 'none';
-
-  // Request pointer lock on canvas
-  const canvas = document.getElementById('c');
-  canvas.requestPointerLock =
-    canvas.requestPointerLock       ||
-    canvas.mozRequestPointerLock    ||
-    canvas.webkitRequestPointerLock;
-  canvas.requestPointerLock();
+  _toggleHud(true);
+  const c = document.getElementById('c');
+  (c.requestPointerLock || c.mozRequestPointerLock || c.webkitRequestPointerLock)?.call(c);
 }
-
-
 
 export function exitPlayerMode() {
   _active = false;
   _root.visible = false;
-
-  document.getElementById('player-hud').style.display = 'none';
-  document.getElementById('player-btn').style.display = 'flex';
-  document.getElementById('hint').style.display       = 'block';
-  document.getElementById('legend').style.display     = 'block';
-  document.getElementById('compass').style.display    = 'flex';
-
+  _toggleHud(false);
   document.exitPointerLock?.();
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-//  UPDATE  (call every frame while active)
-// ─────────────────────────────────────────────────────────────────────────
+function _toggleHud(on) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.style.display = v; };
+  set('player-hud', on ? 'flex' : 'none');
+  set('player-btn', on ? 'none' : 'flex');
+  set('hint',       on ? 'none' : 'block');
+  set('legend',     on ? 'none' : 'block');
+  set('compass',    on ? 'none' : 'flex');
+}
 
+// ─────────────────────────────────────────────────────────────────────────
+// UPDATE
+// ─────────────────────────────────────────────────────────────────────────
 export function updatePlayer() {
   if (!_active) return;
 
-  const speed  = _keys.shift ? RUN_SPEED : WALK_SPEED;
-  const dYaw   = _yaw;
+  const speed = _keys.shift ? RUN_SPEED : WALK_SPEED;
+  const dYaw = _yaw;
 
-  // ── Movement direction ────────────────────────────────────────────
   let dx = 0, dz = 0;
   if (_keys.w) { dx -= Math.sin(dYaw); dz -= Math.cos(dYaw); }
   if (_keys.s) { dx += Math.sin(dYaw); dz += Math.cos(dYaw); }
@@ -134,310 +97,367 @@ export function updatePlayer() {
   _moving = (dx !== 0 || dz !== 0);
 
   if (_moving) {
-    const len = Math.sqrt(dx * dx + dz * dz);
+    const len = Math.hypot(dx, dz);
     _pos.x += (dx / len) * speed;
     _pos.z += (dz / len) * speed;
     _walkTime += _keys.shift ? 0.14 : 0.085;
     _bobTime  += _keys.shift ? 0.18 : 0.10;
   }
 
-  // ── Gravity & jump ────────────────────────────────────────────────
-  if (_keys.space && _onGround) {
-    _velY     = JUMP_VEL;
-    _onGround = false;
-  }
+  if (_keys.space && _onGround) { _velY = JUMP_VEL; _onGround = false; }
+  _velY += GRAVITY;
+  _pos.y += _velY;
+  if (_pos.y <= GROUND_Y) { _pos.y = GROUND_Y; _velY = 0; _onGround = true; }
 
-  _velY    += GRAVITY;
-  _pos.y   += _velY;
+  const bob = (_moving && _onGround) ? Math.sin(_bobTime * 2) * HEAD_BOB_AMP : 0;
 
-  if (_pos.y <= GROUND_Y) {
-    _pos.y    = GROUND_Y;
-    _velY     = 0;
-    _onGround = true;
-  }
-
-  // ── Head bob (vertical) ───────────────────────────────────────────
-  const bob = _moving && _onGround
-    ? Math.sin(_bobTime * 2) * HEAD_BOB_AMP
-    : 0;
-
-  // ── Character mesh position & facing ─────────────────────────────
   _root.position.copy(_pos);
+  _root.position.y += bob * 0.4; // subtle full-body bob
+
   if (_moving) {
-    // Rotate body to face movement direction
     const targetYaw = Math.atan2(dx, dz);
     let diff = targetYaw - _root.rotation.y;
-    // Normalise to -PI..PI
     while (diff >  Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     _root.rotation.y += diff * 0.18;
   }
 
-  // ── Limb animation ───────────────────────────────────────────────
   _animateLimbs();
 
-  // ── Camera ───────────────────────────────────────────────────────
-  const targetCamX = _pos.x + Math.sin(_yaw) * CAM_DIST;
-  const targetCamY = _pos.y + CAM_HEIGHT + bob * 0.5;
-  const targetCamZ = _pos.z + Math.cos(_yaw) * CAM_DIST;
+  // Head tracks pitch
+  if (_head) _head.rotation.x = -_pitch * 0.4;
 
-  _camPos.x += (targetCamX - _camPos.x) * CAM_LERP;
-  _camPos.y += (targetCamY - _camPos.y) * CAM_LERP;
-  _camPos.z += (targetCamZ - _camPos.z) * CAM_LERP;
-
+  // Camera
+  const tx = _pos.x + Math.sin(_yaw) * CAM_DIST;
+  const ty = _pos.y + CAM_HEIGHT + bob * 0.5;
+  const tz = _pos.z + Math.cos(_yaw) * CAM_DIST;
+  _camPos.x += (tx - _camPos.x) * CAM_LERP;
+  _camPos.y += (ty - _camPos.y) * CAM_LERP;
+  _camPos.z += (tz - _camPos.z) * CAM_LERP;
   camera.position.copy(_camPos);
 
-  // Look at character's chest height + bob
-  _camLook.set(
-    _pos.x,
-    _pos.y + 1.1 + bob,
-    _pos.z
-  );
+  _camLook.set(_pos.x, _pos.y + 1.4 + bob, _pos.z);
   camera.lookAt(_camLook);
-
-  // Apply pitch tilt on top of lookAt
   camera.rotateX(-_pitch * 0.25);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-//  PRIVATE — Limb Animation
+// LIMB ANIMATION  (rotation happens at joint pivots)
 // ─────────────────────────────────────────────────────────────────────────
-
 function _animateLimbs() {
   const t = _walkTime;
-  const amp = _moving ? (_keys.shift ? 0.68 : 0.42) : 0;
+  const amp = _moving ? (_keys.shift ? 0.85 : 0.55) : 0;
 
-  // Leg swing (opposite phase)
-  const legSwing = Math.sin(t * 7.0) * amp;
-  _legL.rotation.x =  legSwing;
-  _legR.rotation.x = -legSwing;
+  // Hip / shoulder swing (opposite phase L vs R; arms counter to legs)
+  const swing = Math.sin(t * 7.0) * amp;
 
-  // Arm swing (counter to legs)
-  const armSwing = Math.sin(t * 7.0) * amp * 0.6;
-  _armL.rotation.x = -armSwing;
-  _armR.rotation.x =  armSwing;
+  _legL.rotation.x =  swing;
+  _legR.rotation.x = -swing;
 
-  // Idle sway when standing
+  _armL.rotation.x = -swing * 0.7;
+  _armR.rotation.x =  swing * 0.7;
+
+  // Knees & elbows bend on the back-swing (only flex one direction)
+  const kneeL = Math.max(0,  Math.sin(t * 7.0 + Math.PI * 0.5)) * amp * 0.9;
+  const kneeR = Math.max(0, -Math.sin(t * 7.0 + Math.PI * 0.5)) * amp * 0.9;
+  _kneeL.rotation.x = kneeL;
+  _kneeR.rotation.x = kneeR;
+
+  const elbowBend = 0.25 + Math.abs(swing) * 0.4;
+  _elbowL.rotation.x = elbowBend;
+  _elbowR.rotation.x = elbowBend;
+
+  // Idle: relax pose + gentle breathing
   if (!_moving) {
-    const sway = Math.sin(Date.now() * 0.001) * 0.022;
-    _armL.rotation.z =  0.08 + sway;
-    _armR.rotation.z = -0.08 - sway;
-    _legL.rotation.x = 0;
-    _legR.rotation.x = 0;
+    const breath = Math.sin(Date.now() * 0.0022) * 0.02;
+    _armL.rotation.z =  0.07 + breath;
+    _armR.rotation.z = -0.07 - breath;
+    _armL.rotation.x = 0.05;
+    _armR.rotation.x = 0.05;
+    _elbowL.rotation.x = 0.18;
+    _elbowR.rotation.x = 0.18;
+    _legL.rotation.x = 0; _legR.rotation.x = 0;
+    _kneeL.rotation.x = 0; _kneeR.rotation.x = 0;
+    if (_torso) _torso.position.y = breath * 0.5;
   } else {
-    _armL.rotation.z =  0.06;
-    _armR.rotation.z = -0.06;
+    _armL.rotation.z =  0.05;
+    _armR.rotation.z = -0.05;
+    if (_torso) _torso.position.y = 0;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-//  PRIVATE — Build Character Mesh
+// BUILD CHARACTER  (anatomically proportioned ~1.8m tall)
+// Coordinate convention: feet at y=0, top of head ~1.85
 // ─────────────────────────────────────────────────────────────────────────
-
 function _buildCharacter() {
   _root = new THREE.Group();
 
-  // Materials
-  const skin   = new THREE.MeshLambertMaterial({ color: 0xf5c8a0 });
+  const skin   = new THREE.MeshLambertMaterial({ color: 0xf1c8a4 });
   const shirt  = new THREE.MeshLambertMaterial({ color: 0x1e50a8 });
+  const cuff   = new THREE.MeshLambertMaterial({ color: 0x153d80 });
   const pants  = new THREE.MeshLambertMaterial({ color: 0x252840 });
-  const shoe   = new THREE.MeshLambertMaterial({ color: 0x150c00 });
-  const hair   = new THREE.MeshLambertMaterial({ color: 0x120800 });
+  const shoe   = new THREE.MeshLambertMaterial({ color: 0x120a05 });
+  const hair   = new THREE.MeshLambertMaterial({ color: 0x1a0e06 });
   const beltM  = new THREE.MeshLambertMaterial({ color: 0x111111 });
-  const eyeM   = new THREE.MeshLambertMaterial({ color: 0x111111 });
-  const whiteM = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const eyeB   = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+  const eyeW   = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const lipM   = new THREE.MeshLambertMaterial({ color: 0xa85a4a });
 
-  // ─ HEAD ──────────────────────────────────────────────────────────
-  const headG = new THREE.Group();
-  headG.position.set(0, 1.86, 0);
+  // ── PELVIS / HIPS (root anchor for legs) ──────────────────────────────
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.22, 0.32), pants);
+  pelvis.position.y = 0.92;
 
-  // Face
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 10), skin);
+  // Belt
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.07, 0.34), beltM);
+  belt.position.y = 1.04;
 
-  // Hair top
-  const hairTop = new THREE.Mesh(
-    new THREE.SphereGeometry(0.315, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+  // ── TORSO (tapered: wider shoulders, narrower waist) ──────────────────
+  _torso = new THREE.Group();
+  _torso.position.y = 0; // keep at world; meshes positioned absolutely
+
+  // Lower torso (waist)
+  const waist = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.30, 0.28), shirt);
+  waist.position.y = 1.22;
+
+  // Upper torso (chest) — slightly wider
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.40, 0.32), shirt);
+  chest.position.y = 1.55;
+
+  // Shoulder yoke (rounded look)
+  const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.78, 10), shirt);
+  shoulders.rotation.z = Math.PI / 2;
+  shoulders.position.y = 1.72;
+
+  _torso.add(waist, chest, shoulders);
+
+  // ── NECK ──────────────────────────────────────────────────────────────
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.10, 0.13, 10), skin);
+  neck.position.y = 1.80;
+
+  // ── HEAD (group pivot at neck top, head offset upward) ────────────────
+  _head = new THREE.Group();
+  _head.position.y = 1.87;
+
+  // Skull — slightly egg-shaped (taller than wide)
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 14), skin);
+  skull.scale.set(1.0, 1.15, 1.05);
+  skull.position.y = 0.05;
+
+  // Jaw / chin
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.20), skin);
+  jaw.position.set(0, -0.08, 0.01);
+
+  // Hair cap
+  const hairCap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.172, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
     hair
   );
-  hairTop.position.y = 0.02;
+  hairCap.scale.set(1.0, 1.1, 1.05);
+  hairCap.position.y = 0.06;
 
-  // Hair back/sides
-  const hairBack = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.29, 0.28, 10, 1, true, 0.3, Math.PI * 1.4),
-    hair
-  );
-  hairBack.position.y = -0.08;
-
-  // Eyes
-  for (const sx of [-0.1, 0.1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeM);
-    eye.position.set(sx, 0.04, 0.27);
-    headG.add(eye);
-    const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), whiteM);
-    eyeWhite.position.set(sx, 0.04, 0.265);
-    headG.add(eyeWhite);
-  }
+  // Hair back
+  const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.18), hair);
+  hairBack.position.set(0, 0.05, -0.05);
 
   // Ears
   for (const sx of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.072, 6, 6), skin);
-    ear.position.set(sx * 0.30, 0, 0);
-    headG.add(ear);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), skin);
+    ear.scale.set(0.6, 1.2, 0.5);
+    ear.position.set(sx * 0.165, 0.02, 0);
+    _head.add(ear);
   }
 
-  headG.add(face, hairTop, hairBack);
+  // Eyes (whites + pupils)
+  for (const sx of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), eyeW);
+    w.position.set(sx * 0.058, 0.04, 0.145);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 8), eyeB);
+    p.position.set(sx * 0.058, 0.04, 0.168);
+    _head.add(w, p);
+  }
 
-  // ─ NECK ──────────────────────────────────────────────────────────
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.10, 0.12, 0.20, 8), skin
+  // Brows
+  for (const sx of [-1, 1]) {
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.02), hair);
+    brow.position.set(sx * 0.058, 0.085, 0.158);
+    _head.add(brow);
+  }
+
+  // Nose
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 6), skin);
+  nose.rotation.x = Math.PI;
+  nose.position.set(0, 0.005, 0.18);
+  _head.add(nose);
+
+  // Mouth
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.012, 0.015), lipM);
+  mouth.position.set(0, -0.055, 0.165);
+  _head.add(mouth);
+
+  _head.add(skull, jaw, hairCap, hairBack);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // ARMS — pivot at shoulder, elbow as child pivot
+  // Shoulder Y ≈ 1.70, arm length ≈ 0.72 (upper 0.34 + fore 0.32 + hand 0.06)
+  // ─────────────────────────────────────────────────────────────────────
+  const buildArm = (side /* -1 left, +1 right */) => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side * 0.36, 1.70, 0);
+
+    // Deltoid cap
+    const delt = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 10), shirt);
+    shoulder.add(delt);
+
+    // Upper arm — geometry hangs below pivot
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.07, 0.34, 10), shirt);
+    upper.position.y = -0.17;
+    shoulder.add(upper);
+
+    // Elbow pivot
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.34;
+    shoulder.add(elbow);
+
+    const elbowBall = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), cuff);
+    elbow.add(elbowBall);
+
+    // Forearm
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.32, 10), skin);
+    fore.position.y = -0.16;
+    elbow.add(fore);
+
+    // Wrist + hand
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), skin);
+    wrist.position.y = -0.32;
+    elbow.add(wrist);
+
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.16, 0.06), skin);
+    hand.position.y = -0.40;
+    elbow.add(hand);
+
+    // Thumb
+    const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.04), skin);
+    thumb.position.set(side * 0.05, -0.36, 0.02);
+    elbow.add(thumb);
+
+    return { shoulder, elbow };
+  };
+
+  const La = buildArm(-1); _armL = La.shoulder; _elbowL = La.elbow;
+  const Ra = buildArm( 1); _armR = Ra.shoulder; _elbowR = Ra.elbow;
+  _armL.rotation.z =  0.07;
+  _armR.rotation.z = -0.07;
+
+  // ─────────────────────────────────────────────────────────────────────
+  // LEGS — pivot at hip, knee as child pivot
+  // Hip Y ≈ 0.92, leg length ≈ 0.92 (thigh 0.44 + shin 0.42 + foot 0.06)
+  // ─────────────────────────────────────────────────────────────────────
+  const buildLeg = (side) => {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.13, 0.92, 0);
+
+    const hipBall = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), pants);
+    hip.add(hipBall);
+
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.085, 0.44, 10), pants);
+    thigh.position.y = -0.22;
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -0.44;
+    hip.add(knee);
+
+    const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), pants);
+    knee.add(kneeBall);
+
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.06, 0.42, 10), pants);
+    shin.position.y = -0.21;
+    knee.add(shin);
+
+    const ankle = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), shoe);
+    ankle.position.y = -0.42;
+    knee.add(ankle);
+
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.30), shoe);
+    foot.position.set(0, -0.46, 0.06);
+    knee.add(foot);
+
+    return { hip, knee };
+  };
+
+  const Ll = buildLeg(-1); _legL = Ll.hip; _kneeL = Ll.knee;
+  const Lr = buildLeg( 1); _legR = Lr.hip; _kneeR = Lr.knee;
+
+  // ── Assemble ────────────────────────────────────────────────────────
+  _root.add(pelvis, belt, _torso, neck, _head, _armL, _armR, _legL, _legR);
+
+  // Soft shadow blob (optional fake shadow disc)
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.45, 24),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })
   );
-  neck.position.set(0, 1.51, 0);
-
-  // ─ TORSO ─────────────────────────────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.78, 0.32), shirt);
-  torso.position.set(0, 1.06, 0);
-
-  // Shirt pocket
-  const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.12, 0.02), shirt);
-  pocket.position.set(-0.17, 1.18, 0.17);
-
-  // Belt
-  const beltMesh = new THREE.Mesh(new THREE.BoxGeometry(0.67, 0.085, 0.34), beltM);
-  beltMesh.position.set(0, 0.655, 0);
-
-  // ─ LEFT ARM ──────────────────────────────────────────────────────
-  _armL = new THREE.Group();
-  _armL.position.set(-0.42, 1.32, 0);
-
-  const lShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.115, 7, 7), shirt);
-  const lUpper    = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.38, 0.20), shirt);
-  lUpper.position.y = -0.21;
-  const lElbow = new THREE.Mesh(new THREE.SphereGeometry(0.10, 7, 7), shirt);
-  lElbow.position.y = -0.42;
-  const lFore  = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.34, 0.17), skin);
-  lFore.position.y  = -0.60;
-  const lHand  = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.19, 0.10), skin);
-  lHand.position.y  = -0.82;
-  _armL.add(lShoulder, lUpper, lElbow, lFore, lHand);
-  _armL.rotation.z = 0.08;
-
-  // ─ RIGHT ARM ─────────────────────────────────────────────────────
-  _armR = new THREE.Group();
-  _armR.position.set(0.42, 1.32, 0);
-
-  const rShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.115, 7, 7), shirt);
-  const rUpper    = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.38, 0.20), shirt);
-  rUpper.position.y = -0.21;
-  const rElbow = new THREE.Mesh(new THREE.SphereGeometry(0.10, 7, 7), shirt);
-  rElbow.position.y = -0.42;
-  const rFore  = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.34, 0.17), skin);
-  rFore.position.y  = -0.60;
-  const rHand  = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.19, 0.10), skin);
-  rHand.position.y  = -0.82;
-  _armR.add(rShoulder, rUpper, rElbow, rFore, rHand);
-  _armR.rotation.z = -0.08;
-
-  // ─ LEFT LEG ──────────────────────────────────────────────────────
-  _legL = new THREE.Group();
-  _legL.position.set(-0.18, 0.64, 0);
-
-  const lHip   = new THREE.Mesh(new THREE.SphereGeometry(0.135, 7, 7), pants);
-  const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.45, 0.23), pants);
-  lThigh.position.y = -0.225;
-  const lKnee  = new THREE.Mesh(new THREE.SphereGeometry(0.120, 7, 7), pants);
-  lKnee.position.y  = -0.46;
-  const lShin  = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.40, 0.20), pants);
-  lShin.position.y  = -0.65;
-  const lShoe  = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.115, 0.36), shoe);
-  lShoe.position.set(0, -0.875, 0.04);
-  _legL.add(lHip, lThigh, lKnee, lShin, lShoe);
-
-  // ─ RIGHT LEG ─────────────────────────────────────────────────────
-  _legR = new THREE.Group();
-  _legR.position.set(0.18, 0.64, 0);
-
-  const rHip   = new THREE.Mesh(new THREE.SphereGeometry(0.135, 7, 7), pants);
-  const rThigh = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.45, 0.23), pants);
-  rThigh.position.y = -0.225;
-  const rKnee  = new THREE.Mesh(new THREE.SphereGeometry(0.120, 7, 7), pants);
-  rKnee.position.y  = -0.46;
-  const rShin  = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.40, 0.20), pants);
-  rShin.position.y  = -0.65;
-  const rShoe  = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.115, 0.36), shoe);
-  rShoe.position.set(0, -0.875, 0.04);
-  _legR.add(rHip, rThigh, rKnee, rShin, rShoe);
-
-  // ─ Assemble ──────────────────────────────────────────────────────
-  _root.add(headG, neck, torso, pocket, beltMesh,
-            _armL, _armR, _legL, _legR);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.01;
+  _root.add(shadow);
 
   _root.visible = false;
   scene.add(_root);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-//  PRIVATE — Input Bindings
+// INPUT
 // ─────────────────────────────────────────────────────────────────────────
-
 function _bindKeys() {
-  // ── Keyboard ─────────────────────────────────────────────────────
   window.addEventListener('keydown', (e) => {
     if (!_active) return;
     switch (e.code) {
-      case 'KeyW': case 'ArrowUp':    _keys.w     = true; break;
-      case 'KeyS': case 'ArrowDown':  _keys.s     = true; break;
-      case 'KeyA': case 'ArrowLeft':  _keys.a     = true; break;
-      case 'KeyD': case 'ArrowRight': _keys.d     = true; break;
-      case 'Space':   e.preventDefault(); _keys.space = true;  break;
+      case 'KeyW': case 'ArrowUp':    _keys.w = true; break;
+      case 'KeyS': case 'ArrowDown':  _keys.s = true; break;
+      case 'KeyA': case 'ArrowLeft':  _keys.a = true; break;
+      case 'KeyD': case 'ArrowRight': _keys.d = true; break;
+      case 'Space': e.preventDefault(); _keys.space = true; break;
       case 'ShiftLeft': case 'ShiftRight': _keys.shift = true; break;
-      case 'Escape':  exitPlayerMode(); break;
+      case 'Escape': exitPlayerMode(); break;
     }
   });
-
   window.addEventListener('keyup', (e) => {
     switch (e.code) {
-      case 'KeyW': case 'ArrowUp':    _keys.w     = false; break;
-      case 'KeyS': case 'ArrowDown':  _keys.s     = false; break;
-      case 'KeyA': case 'ArrowLeft':  _keys.a     = false; break;
-      case 'KeyD': case 'ArrowRight': _keys.d     = false; break;
-      case 'Space':    _keys.space = false; break;
+      case 'KeyW': case 'ArrowUp':    _keys.w = false; break;
+      case 'KeyS': case 'ArrowDown':  _keys.s = false; break;
+      case 'KeyA': case 'ArrowLeft':  _keys.a = false; break;
+      case 'KeyD': case 'ArrowRight': _keys.d = false; break;
+      case 'Space': _keys.space = false; break;
       case 'ShiftLeft': case 'ShiftRight': _keys.shift = false; break;
     }
   });
-  
 
-  // ── Mouse look (pointer lock) ─────────────────────────────────────
   document.addEventListener('mousemove', (e) => {
     if (!_active) return;
+    const c = document.getElementById('c');
     const locked =
-      document.pointerLockElement         === document.getElementById('c') ||
-      document.mozPointerLockElement      === document.getElementById('c') ||
-      document.webkitPointerLockElement   === document.getElementById('c');
+      document.pointerLockElement === c ||
+      document.mozPointerLockElement === c ||
+      document.webkitPointerLockElement === c;
     if (!locked) return;
-
     _yaw   -= e.movementX * MOUSE_SENS;
     _pitch  = Math.max(MIN_PITCH, Math.min(MAX_PITCH, _pitch + e.movementY * MOUSE_SENS));
   });
 
-  // ── Click canvas to re-lock pointer ──────────────────────────────
   document.getElementById('c')?.addEventListener('click', () => {
-    if (_active) {
-      const c = document.getElementById('c');
-      (c.requestPointerLock || c.mozRequestPointerLock ||
-       c.webkitRequestPointerLock)?.call(c);
-    }
+    if (!_active) return;
+    const c = document.getElementById('c');
+    (c.requestPointerLock || c.mozRequestPointerLock || c.webkitRequestPointerLock)?.call(c);
   });
 
-  // ── Touch controls for mobile ─────────────────────────────────────
   _setupMobileControls();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-//  PRIVATE — Mobile virtual joystick / buttons
+// MOBILE
 // ─────────────────────────────────────────────────────────────────────────
-
 function _setupMobileControls() {
-  const joyEl   = document.getElementById('mobile-joy');
+  const joyEl = document.getElementById('mobile-joy');
   const joyKnob = document.getElementById('mobile-joy-knob');
   if (!joyEl || !joyKnob) return;
 
@@ -457,7 +477,7 @@ function _setupMobileControls() {
       if (t.identifier !== joyId) continue;
       const dx = t.clientX - joyOrigin.x;
       const dy = t.clientY - joyOrigin.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = Math.hypot(dx, dy);
       const clamp = Math.min(dist, MAX_R);
       const nx = dist > 0 ? (dx / dist) * clamp : 0;
       const ny = dist > 0 ? (dy / dist) * clamp : 0;
@@ -474,10 +494,9 @@ function _setupMobileControls() {
     joyKnob.style.transform = 'translate(0,0)';
     _keys.w = _keys.s = _keys.a = _keys.d = false;
   };
-  window.addEventListener('touchend',    _joyEnd);
+  window.addEventListener('touchend', _joyEnd);
   window.addEventListener('touchcancel', _joyEnd);
 
-  // Jump button
   document.getElementById('mobile-jump')?.addEventListener('touchstart', (e) => {
     e.preventDefault(); _keys.space = true;
   }, { passive: false });
@@ -485,13 +504,12 @@ function _setupMobileControls() {
     _keys.space = false;
   });
 
-  // Look via swipe on right half of screen
   let lookPrev = null, lookId2 = null;
   window.addEventListener('touchstart', (e) => {
     if (!_active) return;
     for (const t of e.changedTouches) {
       if (t.clientX > window.innerWidth * 0.55 && lookId2 === null) {
-        lookId2  = t.identifier;
+        lookId2 = t.identifier;
         lookPrev = { x: t.clientX, y: t.clientY };
       }
     }
