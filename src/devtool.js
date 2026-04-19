@@ -564,9 +564,17 @@ function _renderProps() {
   if (!panel) return;
 
   if (!STATE.selected.length) {
-    panel.style.display = 'none'; return;
+    panel.style.display = 'flex';
+    panel.innerHTML = `
+      <div class="mc-props-panel-hdr">Properties</div>
+      <div class="mc-props-empty">
+        <div class="mc-props-empty-icon">⊡</div>
+        <p>Select an object<br>to view properties</p>
+      </div>
+    `;
+    return;
   }
-  panel.style.display = 'block';
+  panel.style.display = 'flex';
 
   const mesh = STATE.selected[0];
   const entry = STATE.objects.find(e => e.mesh === mesh);
@@ -851,315 +859,293 @@ function _buildUI() {
   // CSS ──────────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
   style.textContent = `
-    @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
     :root {
-      --mc-bg:      #1a1a1a;
-      --mc-panel:   #2d2416;
-      --mc-slot:    #8b8b8b;
-      --mc-slotdk:  #373737;
-      --mc-slotlt:  #dbdbdb;
-      --mc-accent:  #ffff55;
-      --mc-green:   #55ff55;
-      --mc-red:     #ff5555;
-      --mc-blue:    #5588ff;
-      --mc-text:    #e0e0e0;
-      --mc-text2:   #aaaaaa;
-      --mc-border:  #555;
-      --mc-font:    'VT323', 'Courier New', monospace;
+      --dt-bg:       #1a1a1a;
+      --dt-surface:  #252526;
+      --dt-surface2: #2d2d30;
+      --dt-border:   #3e3e42;
+      --dt-accent:   #4d9eff;
+      --dt-green:    #4ec9b0;
+      --dt-red:      #e74c3c;
+      --dt-text:     #d4d4d4;
+      --dt-text2:    #9d9d9d;
+      --dt-text3:    #5f5f5f;
+      --dt-sel:      rgba(77,158,255,0.18);
+      --dt-hover:    rgba(255,255,255,0.05);
+      --dt-font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --dt-mono:     'Cascadia Code', 'Consolas', monospace;
+      --dt-panel-w:  210px;
+      --dt-props-w:  240px;
     }
 
     #mc-root * { box-sizing: border-box; margin: 0; }
-    #mc-root { font-family: var(--mc-font); color: var(--mc-text); }
+    #mc-root { font-family: var(--dt-font); color: var(--dt-text); font-size: 13px; }
 
     /* ── HOTBAR ───────────────────────────────────── */
     #mc-hotbar {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 3px; padding: 5px;
-      background: rgba(0,0,0,0.72);
-      border: 3px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: inset -2px -2px 0 #000, inset 2px 2px 0 rgba(255,255,255,0.15);
-      z-index: 9990; image-rendering: pixelated;
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 2px; padding: 5px;
+      background: var(--dt-surface);
+      border: 1px solid var(--dt-border);
+      border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
+      z-index: 9990;
     }
     .mc-hb-slot {
-      width: 54px; height: 54px;
-      background: var(--mc-slot);
-      border: 3px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: inset -2px -2px 0 #333, inset 2px 2px 0 #ccc;
+      width: 50px; height: 50px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 7px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      cursor: pointer; position: relative; transition: background 0.05s;
-      user-select: none;
+      cursor: pointer; position: relative;
+      transition: background 0.12s, border-color 0.12s;
+      user-select: none; gap: 2px;
     }
-    .mc-hb-slot:hover { background: #9e9e9e; }
+    .mc-hb-slot:hover { background: var(--dt-hover); border-color: var(--dt-border); }
     .mc-hb-selected {
-      border-color: var(--mc-accent) !important;
-      box-shadow: 0 0 0 2px var(--mc-accent), inset -2px -2px 0 #333, inset 2px 2px 0 #ccc !important;
-      background: #a0a060 !important;
+      background: var(--dt-sel) !important;
+      border-color: var(--dt-accent) !important;
+      box-shadow: inset 0 0 0 1px rgba(77,158,255,0.2);
     }
     .mc-hb-key {
-      position: absolute; top: 2px; left: 4px; font-size: 11px; color: var(--mc-text2);
-      font-family: var(--mc-font); line-height: 1;
+      position: absolute; top: 3px; left: 5px;
+      font-size: 9px; color: var(--dt-text3);
+      font-family: var(--dt-font); line-height: 1;
     }
-    .mc-hb-icon { font-size: 22px; line-height: 1; }
-    .mc-hb-label { font-size: 9px; color: var(--mc-text2); margin-top: 1px; text-align: center; max-width: 50px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .mc-hb-icon { font-size: 18px; line-height: 1; }
+    .mc-hb-label { font-size: 8.5px; color: var(--dt-text2); text-align: center; max-width: 48px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .mc-hb-div { width: 1px; height: 36px; background: var(--dt-border); margin: 0 2px; }
 
     /* ── STATUS BAR ──────────────────────────────── */
     #mc-statusbar {
-      position: fixed; bottom: 0; left: 0; right: 0; height: 22px;
-      background: rgba(0,0,0,0.85);
-      display: flex; align-items: center; gap: 16px; padding: 0 12px;
-      font-family: var(--mc-font); font-size: 14px; color: var(--mc-text2);
-      z-index: 9989; border-top: 1px solid #333;
+      position: fixed; bottom: 0; left: 0; right: 0; height: 24px;
+      background: var(--dt-surface2);
+      display: flex; align-items: center; gap: 14px; padding: 0 14px;
+      font-size: 11px; color: var(--dt-text2);
+      z-index: 9989; border-top: 1px solid var(--dt-border);
     }
-    #mc-sb-tool { color: var(--mc-accent); font-weight: bold; }
-    #mc-held { color: var(--mc-green); }
+    #mc-sb-tool { color: var(--dt-accent); font-weight: 600; letter-spacing: 0.3px; font-size: 11px; }
+    #mc-held { color: var(--dt-green); }
+    .mc-sb-sep { width: 1px; height: 12px; background: var(--dt-border); flex-shrink: 0; }
 
     /* ── HUD (draw length) ───────────────────────── */
     #mc-hud {
-      position: fixed; top: 36%; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.82); color: var(--mc-accent);
-      padding: 6px 24px; font-family: var(--mc-font); font-size: 22px;
-      border: 2px solid var(--mc-accent); border-radius: 2px;
-      pointer-events: none; display: none; z-index: 9999; letter-spacing: 1px;
+      position: fixed; top: 30%; left: 50%; transform: translateX(-50%);
+      background: rgba(26,26,26,0.92); color: var(--dt-accent);
+      padding: 9px 22px; font-size: 14px; font-weight: 500;
+      border: 1px solid var(--dt-accent); border-radius: 8px;
+      pointer-events: none; display: none; z-index: 9999;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
 
-    /* ── PROPERTIES PANEL ────────────────────────── */
+    /* ── PROPERTIES PANEL (right sidebar) ────────── */
     #mc-props {
-      position: fixed; right: 12px; top: 50%; transform: translateY(-50%);
-      width: 228px; background: rgba(18,14,8,0.95);
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: 4px 4px 0 rgba(0,0,0,0.6); z-index: 9985; display: none;
-      font-family: var(--mc-font);
+      position: fixed; right: 0; top: 0; bottom: 24px;
+      width: var(--dt-props-w);
+      background: var(--dt-surface);
+      border-left: 1px solid var(--dt-border);
+      z-index: 9985;
+      display: flex; flex-direction: column; overflow-y: auto;
     }
+    .mc-props-panel-hdr {
+      background: var(--dt-surface2); padding: 10px 12px;
+      font-size: 10px; font-weight: 600; color: var(--dt-text2);
+      border-bottom: 1px solid var(--dt-border);
+      letter-spacing: 0.6px; text-transform: uppercase; flex-shrink: 0;
+    }
+    .mc-props-empty {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--dt-text3); text-align: center; font-size: 12px; gap: 10px; padding: 20px;
+    }
+    .mc-props-empty-icon { font-size: 36px; opacity: 0.2; }
     .mc-props-head {
-      display: flex; align-items: center; gap: 6px; padding: 6px 8px;
-      background: var(--mc-panel); border-bottom: 1px solid #3a3020;
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 12px 10px;
+      background: var(--dt-surface2);
+      border-bottom: 1px solid var(--dt-border);
+      position: sticky; top: 0; z-index: 1; flex-shrink: 0;
     }
-    .mc-props-icon { font-size: 18px; }
+    .mc-props-icon { font-size: 15px; }
     .mc-props-label {
-      flex: 1; background: #1a1208; border: 1px solid #554; color: var(--mc-text);
-      font-family: var(--mc-font); font-size: 14px; padding: 2px 6px; outline: none;
+      flex: 1; background: var(--dt-bg); border: 1px solid var(--dt-border);
+      color: var(--dt-text); font-family: var(--dt-font); font-size: 12px;
+      padding: 4px 8px; border-radius: 4px; outline: none;
+      transition: border-color 0.15s;
     }
-    .mc-props-label:focus { border-color: var(--mc-accent); }
+    .mc-props-label:focus { border-color: var(--dt-accent); }
     .mc-props-close {
-      background: none; border: none; color: var(--mc-text2); cursor: pointer;
-      font-size: 18px; line-height: 1; padding: 0 4px;
+      background: none; border: none; color: var(--dt-text2); cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 3px 5px; border-radius: 3px;
+      transition: color 0.12s, background 0.12s;
     }
-    .mc-props-close:hover { color: var(--mc-red); }
-    .mc-props-type { padding: 3px 8px; font-size: 13px; color: var(--mc-text2); background: #1a1208; border-bottom: 1px solid #3a3020; }
-    .mc-prop-dim {
-      display: flex; gap: 4px; padding: 4px 8px; background: #111008; border-bottom: 1px solid #2a2010;
-    }
-    .mc-prop-dim span { flex: 1; text-align: center; font-size: 13px; color: var(--mc-text2); background: #1c1408; padding: 2px; }
-    .mc-xyz { padding: 5px 8px; border-bottom: 1px solid #2a2010; }
-    .mc-xyz-lbl { font-size: 11px; color: var(--mc-text2); margin-bottom: 3px; }
-    .mc-xyz-row { display: flex; gap: 3px; }
-    .mc-xyz-row label { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
-    .mc-xyz-row label > span { font-size: 11px; font-family: var(--mc-font); font-weight: bold; }
-    .mc-ax-x { color: #ff6666; } .mc-ax-y { color: #66ff66; } .mc-ax-z { color: #6699ff; }
+    .mc-props-close:hover { color: var(--dt-red); background: rgba(231,76,60,0.1); }
+    .mc-props-type { padding: 5px 12px; font-size: 11px; color: var(--dt-text2); background: var(--dt-surface); border-bottom: 1px solid var(--dt-border); flex-shrink: 0; }
+    .mc-prop-dim { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--dt-border); flex-shrink: 0; }
+    .mc-prop-dim span { flex: 1; text-align: center; font-size: 11px; color: var(--dt-text2); background: var(--dt-surface2); padding: 3px 4px; border-radius: 3px; border: 1px solid var(--dt-border); }
+    .mc-xyz { padding: 6px 12px 8px; border-bottom: 1px solid var(--dt-border); flex-shrink: 0; }
+    .mc-xyz-lbl { font-size: 10px; color: var(--dt-text3); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }
+    .mc-xyz-row { display: flex; gap: 4px; }
+    .mc-xyz-row label { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+    .mc-xyz-row label > span { font-size: 9px; font-weight: 700; text-align: center; padding: 2px 0; border-radius: 3px 3px 0 0; letter-spacing: 0.5px; }
+    .mc-ax-x { color: #ff7b7b; background: rgba(255,123,123,0.14); }
+    .mc-ax-y { color: #6bcb77; background: rgba(107,203,119,0.14); }
+    .mc-ax-z { color: #4d9eff; background: rgba(77,158,255,0.14); }
     .mc-xyz-inp {
-      width: 100%; background: #1a1208; border: 1px solid #554; color: var(--mc-text);
-      font-family: var(--mc-font); font-size: 13px; padding: 2px 3px; text-align: center; outline: none;
+      width: 100%; background: var(--dt-surface2); border: 1px solid var(--dt-border);
+      color: var(--dt-text); font-family: var(--dt-mono); font-size: 11px;
+      padding: 4px 4px; text-align: center; outline: none;
+      border-top: none; border-radius: 0 0 3px 3px;
+      transition: border-color 0.15s;
     }
-    .mc-xyz-inp:focus { border-color: var(--mc-accent); }
-    .mc-props-section-head { padding: 4px 8px; font-size: 11px; color: var(--mc-text2); background: #1a1208; border-bottom: 1px solid #2a2010; }
-    .mc-align-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 5px 8px; background: #111008; border-bottom: 1px solid #2a2010; }
-    .mc-align-row button { background: #3a2e18; border: 1px solid #665; color: var(--mc-text); font-family: var(--mc-font); font-size: 12px; padding: 2px 6px; cursor: pointer; }
-    .mc-align-row button:hover { background: #4a3e28; border-color: var(--mc-accent); }
-    .mc-action-row { display: flex; gap: 3px; padding: 6px 8px; }
-    .mc-action-row button { flex: 1; background: #3a2e18; border: 1px solid #665; color: var(--mc-text); font-family: var(--mc-font); font-size: 13px; padding: 4px 2px; cursor: pointer; }
-    .mc-action-row button:hover { background: #4a3e28; border-color: var(--mc-accent); }
-    .mc-action-row .mc-delete { color: var(--mc-red); } .mc-action-row .mc-delete:hover { background: #4a1010; border-color: var(--mc-red); }
+    .mc-xyz-inp:focus { border-color: var(--dt-accent); background: #222; }
+    .mc-props-section-head { padding: 8px 12px 4px; font-size: 10px; font-weight: 600; color: var(--dt-text3); text-transform: uppercase; letter-spacing: 0.8px; flex-shrink: 0; }
+    .mc-align-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 4px 12px 8px; flex-shrink: 0; }
+    .mc-align-row button { background: var(--dt-surface2); border: 1px solid var(--dt-border); color: var(--dt-text2); font-family: var(--dt-font); font-size: 11px; padding: 5px 4px; cursor: pointer; border-radius: 3px; transition: background 0.1s, color 0.1s, border-color 0.1s; }
+    .mc-align-row button:hover { background: var(--dt-hover); color: var(--dt-text); border-color: var(--dt-accent); }
+    .mc-action-row { display: flex; gap: 4px; padding: 8px 12px; flex-shrink: 0; }
+    .mc-action-row button { flex: 1; background: var(--dt-surface2); border: 1px solid var(--dt-border); color: var(--dt-text2); font-family: var(--dt-font); font-size: 12px; padding: 6px 4px; cursor: pointer; border-radius: 4px; transition: background 0.1s, color 0.1s; }
+    .mc-action-row button:hover { background: var(--dt-hover); color: var(--dt-text); }
+    .mc-action-row .mc-delete { color: var(--dt-red); border-color: rgba(231,76,60,0.25); }
+    .mc-action-row .mc-delete:hover { background: rgba(231,76,60,0.12); border-color: var(--dt-red); }
 
     /* ── INVENTORY ────────────────────────────────── */
     #mc-inventory {
       position: fixed; inset: 0; z-index: 9995;
       display: flex; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.65);
-      font-family: var(--mc-font);
-      pointer-events: none; opacity: 0; transition: opacity 0.12s;
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+      pointer-events: none; opacity: 0; transition: opacity 0.15s;
     }
     #mc-inventory.mc-inv-open { opacity: 1; pointer-events: all; }
     #mc-inventory.mc-inv-closed { opacity: 0; pointer-events: none; }
-
     #mc-inv-box {
-      width: 580px; max-width: 95vw;
-      background: var(--mc-bg);
-      border: 4px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: 8px 8px 0 rgba(0,0,0,0.8);
-      display: flex; flex-direction: column;
-      max-height: 80vh;
+      width: 640px; max-width: 95vw;
+      background: var(--dt-surface);
+      border: 1px solid var(--dt-border); border-radius: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4);
+      display: flex; flex-direction: column; max-height: 82vh; overflow: hidden;
     }
-
     #mc-inv-title {
-      background: var(--mc-panel); padding: 10px 16px;
-      font-size: 22px; color: var(--mc-accent);
-      border-bottom: 3px solid var(--mc-slotdk);
+      background: var(--dt-surface2); padding: 14px 16px;
+      font-size: 14px; font-weight: 600; color: var(--dt-text);
+      border-bottom: 1px solid var(--dt-border);
       display: flex; align-items: center; justify-content: space-between;
-      text-shadow: 2px 2px 0 #000;
+      border-radius: 10px 10px 0 0;
     }
-    #mc-inv-title button {
-      background: var(--mc-red); border: 2px solid; border-color: #ff9999 #880000 #880000 #ff9999;
-      color: white; font-family: var(--mc-font); font-size: 16px; padding: 2px 10px; cursor: pointer;
-    }
-
-    #mc-tabs {
-      display: flex; flex-wrap: wrap; gap: 2px; padding: 8px;
-      background: #111; border-bottom: 2px solid var(--mc-slotdk);
-    }
-    .mc-tab {
-      padding: 4px 14px; background: var(--mc-slot); cursor: pointer;
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      font-family: var(--mc-font); font-size: 15px; color: #111;
-      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd;
-    }
-    .mc-tab:hover { background: #9e9e9e; }
-    .mc-tab-active {
-      background: #c8c850; border-color: var(--mc-accent) !important;
-      box-shadow: 0 0 0 1px var(--mc-accent), inset -1px -1px 0 #666, inset 1px 1px 0 #ffe !important;
-    }
-
+    #mc-inv-title .mc-inv-title-icon { color: var(--dt-accent); margin-right: 8px; font-size: 15px; }
+    #mc-inv-title button { background: rgba(255,255,255,0.06); border: 1px solid var(--dt-border); color: var(--dt-text2); font-family: var(--dt-font); font-size: 12px; padding: 4px 10px; cursor: pointer; border-radius: 4px; transition: background 0.12s, color 0.12s; }
+    #mc-inv-title button:hover { background: rgba(231,76,60,0.14); color: var(--dt-red); }
+    #mc-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px; background: var(--dt-surface); border-bottom: 1px solid var(--dt-border); }
+    .mc-tab { padding: 4px 12px; background: transparent; cursor: pointer; border: 1px solid var(--dt-border); font-family: var(--dt-font); font-size: 12px; color: var(--dt-text2); border-radius: 4px; transition: background 0.1s, color 0.1s; }
+    .mc-tab:hover { background: var(--dt-hover); color: var(--dt-text); }
+    .mc-tab-active { background: var(--dt-sel) !important; border-color: var(--dt-accent) !important; color: var(--dt-accent) !important; }
     #mc-inv-grid {
       flex: 1; overflow-y: auto; display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 4px; padding: 10px;
-      background: #0d0d0d;
-      scrollbar-width: thin; scrollbar-color: #444 #111;
+      gap: 6px; padding: 12px; background: var(--dt-bg);
+      scrollbar-width: thin; scrollbar-color: #444 #1a1a1a;
     }
-    .mc-inv-item {
-      background: var(--mc-slot); cursor: pointer;
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: inset -2px -2px 0 #333, inset 2px 2px 0 #ccc;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 8px 4px; gap: 4px; transition: background 0.08s; min-height: 70px;
-    }
-    .mc-inv-item:hover { background: #9e9e9e; box-shadow: 0 0 0 2px var(--mc-accent), inset -2px -2px 0 #333, inset 2px 2px 0 #ccc; }
-    .mc-inv-icon { font-size: 26px; line-height: 1; }
-    .mc-inv-name { font-size: 11px; color: #111; text-align: center; line-height: 1.2; }
+    .mc-inv-item { background: var(--dt-surface); cursor: pointer; border: 1px solid var(--dt-border); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 4px; gap: 5px; transition: background 0.1s, border-color 0.1s; min-height: 74px; }
+    .mc-inv-item:hover { background: var(--dt-surface2); border-color: var(--dt-accent); box-shadow: 0 0 0 1px rgba(77,158,255,0.2); }
+    .mc-inv-icon { font-size: 24px; line-height: 1; }
+    .mc-inv-name { font-size: 11px; color: var(--dt-text2); text-align: center; line-height: 1.3; }
+    #mc-inv-search { padding: 8px 12px; border-top: 1px solid var(--dt-border); background: var(--dt-surface); display: flex; gap: 8px; align-items: center; border-radius: 0 0 10px 10px; }
+    #mc-inv-search input { flex: 1; background: var(--dt-surface2); border: 1px solid var(--dt-border); color: var(--dt-text); font-family: var(--dt-font); font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none; transition: border-color 0.15s; }
+    #mc-inv-search input:focus { border-color: var(--dt-accent); }
+    #mc-inv-search span { color: var(--dt-text3); font-size: 11px; white-space: nowrap; }
 
-    #mc-inv-search {
-      padding: 6px 10px; border-top: 2px solid var(--mc-slotdk);
-      background: #111; display: flex; gap: 6px; align-items: center;
-    }
-    #mc-inv-search input {
-      flex: 1; background: #1a1a1a; border: 2px solid #555; color: var(--mc-text);
-      font-family: var(--mc-font); font-size: 15px; padding: 4px 10px; outline: none;
-    }
-    #mc-inv-search input:focus { border-color: var(--mc-accent); }
-    #mc-inv-search span { color: var(--mc-text2); font-size: 13px; white-space: nowrap; }
-
-    /* ── SCENE PANEL (hierarchy + code) ─────────── */
+    /* ── SCENE PANEL (left sidebar) ──────────────── */
     #mc-scene-panel {
-      position: fixed; left: 10px; top: 50%; transform: translateY(-50%);
-      width: 200px; background: rgba(18,14,8,0.95);
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      box-shadow: 4px 4px 0 rgba(0,0,0,0.6); z-index: 9980; max-height: 65vh; display: flex; flex-direction: column;
-      font-family: var(--mc-font);
+      position: fixed; left: 0; top: 0; bottom: 24px;
+      width: var(--dt-panel-w);
+      background: var(--dt-surface);
+      border-right: 1px solid var(--dt-border);
+      box-shadow: 2px 0 10px rgba(0,0,0,0.25);
+      z-index: 9980; display: flex; flex-direction: column;
+      font-family: var(--dt-font);
     }
     #mc-scene-panel-hdr {
-      background: var(--mc-panel); padding: 6px 10px;
-      font-size: 15px; color: var(--mc-accent); border-bottom: 1px solid #3a3020;
+      background: var(--dt-surface2); padding: 10px 12px;
+      font-size: 10px; font-weight: 600; color: var(--dt-text2);
+      border-bottom: 1px solid var(--dt-border);
       display: flex; justify-content: space-between; align-items: center;
+      letter-spacing: 0.6px; text-transform: uppercase; flex-shrink: 0;
     }
-    #mc-scene-panel-hdr button {
-      background: none; border: 1px solid #554; color: var(--mc-text2); cursor: pointer;
-      font-family: var(--mc-font); font-size: 12px; padding: 1px 6px;
-    }
-    #mc-scene-panel-hdr button:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+    #mc-scene-panel-hdr button { background: none; border: 1px solid transparent; color: var(--dt-text2); cursor: pointer; font-family: var(--dt-font); font-size: 11px; padding: 2px 6px; border-radius: 3px; transition: background 0.1s, color 0.1s; }
+    #mc-scene-panel-hdr button:hover { background: var(--dt-hover); color: var(--dt-accent); border-color: var(--dt-border); }
     #mc-hier-list { flex: 1; overflow-y: auto; min-height: 0; }
-    .mc-hier-empty { padding: 12px; text-align: center; color: var(--mc-text2); font-size: 13px; }
-    .mc-hier-row {
-      display: flex; align-items: center; gap: 5px; padding: 3px 8px;
-      font-size: 13px; cursor: pointer; border-bottom: 1px solid #1a1408;
-      white-space: nowrap; overflow: hidden;
-    }
-    .mc-hier-row:hover { background: #2a2010; }
-    .mc-hier-sel { background: rgba(255,255,85,0.1); color: var(--mc-accent); }
-    .mc-hier-hid { opacity: 0.35; }
+    .mc-hier-empty { padding: 18px 12px; text-align: center; color: var(--dt-text3); font-size: 12px; }
+    .mc-hier-row { display: flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.025); white-space: nowrap; overflow: hidden; transition: background 0.08s; }
+    .mc-hier-row:hover { background: var(--dt-hover); }
+    .mc-hier-sel { background: var(--dt-sel) !important; color: var(--dt-accent); }
+    .mc-hier-hid { opacity: 0.38; }
     .mc-hier-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
     .mc-hier-acts { display: flex; gap: 2px; opacity: 0; }
     .mc-hier-row:hover .mc-hier-acts { opacity: 1; }
-    .mc-hier-eye, .mc-hier-del {
-      background: none; border: none; cursor: pointer; font-size: 11px; padding: 0 3px; color: var(--mc-text2);
-    }
-    .mc-hier-del:hover { color: var(--mc-red); }
+    .mc-hier-eye, .mc-hier-del { background: none; border: none; cursor: pointer; font-size: 11px; padding: 1px 4px; color: var(--dt-text3); border-radius: 3px; transition: color 0.1s, background 0.1s; }
+    .mc-hier-eye:hover { color: var(--dt-text); background: var(--dt-hover); }
+    .mc-hier-del:hover { color: var(--dt-red); background: rgba(231,76,60,0.1); }
 
-    /* ── DRAW TOOLS STRIP ─────────────────────────── */
+    /* ── DRAW TOOLS (inside scene panel footer) ── */
     #mc-draw-strip {
-      position: fixed; left: 10px; bottom: 90px;
-      background: rgba(18,14,8,0.92);
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 9980;
-      font-family: var(--mc-font);
+      border-top: 1px solid var(--dt-border);
+      background: var(--dt-bg);
+      padding: 8px 8px 6px; flex-shrink: 0;
     }
-    #mc-draw-strip-lbl { font-size: 11px; color: var(--mc-text2); text-align: center; padding-bottom: 3px; border-bottom: 1px solid #333; margin-bottom: 2px; }
-    .mc-draw-btn {
-      display: flex; align-items: center; gap: 6px; padding: 5px 10px;
-      background: var(--mc-slot); cursor: pointer;
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      font-family: var(--mc-font); font-size: 14px; color: #111;
-      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd; min-width: 120px;
-      transition: background 0.08s;
-    }
-    .mc-draw-btn:hover { background: #9e9e9e; }
-    .mc-draw-btn.mc-active {
-      background: #c8c850; border-color: var(--mc-accent);
-      box-shadow: 0 0 0 1px var(--mc-accent), inset -1px -1px 0 #555, inset 1px 1px 0 #ffe;
-    }
-    .mc-draw-key { font-size: 11px; color: #555; margin-left: auto; }
+    #mc-draw-strip-lbl { font-size: 9px; color: var(--dt-text3); text-align: center; padding-bottom: 5px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; border-bottom: 1px solid var(--dt-border); margin-bottom: 5px; }
+    .mc-draw-btn { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: transparent; cursor: pointer; border: 1px solid var(--dt-border); font-family: var(--dt-font); font-size: 12px; color: var(--dt-text2); border-radius: 4px; transition: background 0.1s, color 0.1s; width: 100%; margin-bottom: 3px; }
+    .mc-draw-btn:hover { background: var(--dt-hover); color: var(--dt-text); }
+    .mc-draw-btn.mc-active { background: var(--dt-sel); border-color: var(--dt-accent); color: var(--dt-accent); }
+    .mc-draw-key { font-size: 9px; color: var(--dt-text3); margin-left: auto; }
 
-    /* ── FILE STRIP ───────────────────────────────── */
+    /* ── FILE OPS (inside scene panel footer) ─── */
     #mc-file-strip {
-      position: fixed; right: 12px; bottom: 90px;
-      background: rgba(18,14,8,0.92);
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 9980;
-      font-family: var(--mc-font);
+      border-top: 1px solid var(--dt-border);
+      background: var(--dt-surface);
+      padding: 6px 8px; flex-shrink: 0;
     }
-    #mc-file-strip button, #mc-link-btn {
-      background: var(--mc-slot); cursor: pointer;
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
-      font-family: var(--mc-font); font-size: 13px; color: #111; padding: 4px 10px;
-      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd; cursor: pointer;
-    }
-    #mc-file-strip button:hover, #mc-link-btn:hover { background: #9e9e9e; }
-    #mc-status-msg { font-size: 11px; color: var(--mc-green); text-align: center; min-height: 14px; }
+    #mc-file-strip button, #mc-link-btn { background: var(--dt-surface2); cursor: pointer; border: 1px solid var(--dt-border); font-family: var(--dt-font); font-size: 11px; color: var(--dt-text2); padding: 5px 10px; border-radius: 4px; transition: background 0.1s, color 0.1s; width: 100%; margin-bottom: 3px; text-align: left; }
+    #mc-file-strip button:hover, #mc-link-btn:hover { background: var(--dt-hover); color: var(--dt-text); }
+    #mc-status-msg { font-size: 11px; color: var(--dt-green); text-align: center; min-height: 14px; margin-bottom: 3px; }
 
     /* ── CODE PANEL ───────────────────────────────── */
     #mc-code-panel {
-      position: fixed; bottom: 90px; left: 220px; right: 240px;
-      background: rgba(8,8,4,0.92);
-      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      position: fixed; bottom: 24px; left: var(--dt-panel-w); right: var(--dt-props-w);
+      background: var(--dt-bg);
+      border: 1px solid var(--dt-border); border-bottom: none;
       z-index: 9978; overflow: hidden; display: none; flex-direction: column;
-      font-family: var(--mc-font);
     }
     #mc-code-panel.mc-code-open { display: flex; height: 160px; }
-    #mc-code-hdr { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; background: #1a1208; border-bottom: 1px solid #333; }
-    #mc-code-hdr span { font-size: 13px; color: var(--mc-accent); }
-    #mc-code-hdr button { background: #3a2e18; border: 1px solid #665; color: var(--mc-text2); font-family: var(--mc-font); font-size: 12px; padding: 2px 8px; cursor: pointer; }
-    #mc-code-hdr button:hover { border-color: var(--mc-accent); color: var(--mc-text); }
-    #mc-code-pre { flex: 1; overflow: auto; padding: 6px 10px; font-family: 'Courier New', monospace; font-size: 11px; color: #7ec8e3; white-space: pre; line-height: 1.5; }
+    #mc-code-hdr { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--dt-surface2); border-bottom: 1px solid var(--dt-border); }
+    #mc-code-hdr span { font-size: 12px; color: var(--dt-accent); font-weight: 500; }
+    #mc-code-hdr button { background: var(--dt-surface); border: 1px solid var(--dt-border); color: var(--dt-text2); font-family: var(--dt-font); font-size: 12px; padding: 2px 8px; cursor: pointer; border-radius: 3px; transition: background 0.1s, color 0.1s; }
+    #mc-code-hdr button:hover { color: var(--dt-text); background: var(--dt-hover); }
+    #mc-code-pre { flex: 1; overflow: auto; padding: 8px 12px; font-family: var(--dt-mono); font-size: 11px; color: #9cdcfe; white-space: pre; line-height: 1.6; }
 
     /* ── TOAST ────────────────────────────────────── */
     #mc-toast {
-      position: fixed; bottom: 95px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.88); color: var(--mc-text); padding: 6px 18px;
-      font-family: var(--mc-font); font-size: 16px; border: 1px solid #444;
+      position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%);
+      background: var(--dt-surface2); color: var(--dt-text); padding: 8px 18px;
+      font-family: var(--dt-font); font-size: 13px;
+      border: 1px solid var(--dt-border); border-radius: 6px;
       z-index: 99999; opacity: 0; transition: opacity 0.2s; pointer-events: none;
-      text-shadow: 1px 1px 0 #000;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
     }
     #mc-toast.mc-toast-show { opacity: 1; }
 
-    /* ── CROSSHAIR (shown in edit mode) ──────────── */
+    /* ── CROSSHAIR ────────────────────────────────── */
     #mc-crosshair {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
       pointer-events: none; z-index: 9970; display: none;
+      width: 16px; height: 16px;
     }
     #mc-crosshair::before, #mc-crosshair::after {
       content: ''; position: absolute; background: rgba(255,255,255,0.7);
     }
-    #mc-crosshair::before { width: 2px; height: 16px; left: -1px; top: -8px; }
-    #mc-crosshair::after  { width: 16px; height: 2px; left: -8px; top: -1px; }
+    #mc-crosshair::before { width: 1px; height: 14px; left: 7px; top: 1px; }
+    #mc-crosshair::after  { width: 14px; height: 1px; left: 1px; top: 7px; }
   `;
   document.head.appendChild(style);
 
@@ -1172,49 +1158,59 @@ function _buildUI() {
 
     <!-- Status bar -->
     <div id="mc-statusbar">
-      <span id="mc-sb-tool">SELECT ↖</span>
-      <span id="mc-sb-cursor" style="color:#666">0, 0</span>
+      <span id="mc-sb-tool">SELECT</span>
+      <div class="mc-sb-sep"></div>
+      <span id="mc-sb-cursor" style="color:#3a3a3a;font-family:var(--dt-mono)">0.00, 0.00</span>
+      <div class="mc-sb-sep"></div>
       <span id="mc-held"></span>
-      <span id="mc-sb-objs" style="color:#666">0 objects</span>
-      <span id="mc-sb-snap" style="color:#666">Snap: 0.5</span>
-      <span id="mc-sb-space" style="color:#666">🌐 World</span>
-      <span style="margin-left:auto;color:#444;font-size:12px">E=Inventory  1-9=Slots  Tab=Snap  F=Focus  Ctrl+Z/Y</span>
+      <span id="mc-sb-objs" style="color:#3a3a3a">0 objects</span>
+      <div class="mc-sb-sep"></div>
+      <span id="mc-sb-snap" style="color:#3a3a3a">Snap: 0.5</span>
+      <div class="mc-sb-sep"></div>
+      <span id="mc-sb-space" style="color:#3a3a3a">🌐 World</span>
+      <span style="margin-left:auto;color:#333;font-size:10px">E = Library  ·  1-9 = Slots  ·  Tab = Snap  ·  F = Focus  ·  Ctrl+Z/Y = Undo/Redo</span>
     </div>
 
     <!-- Draw length HUD -->
     <div id="mc-hud"></div>
 
-    <!-- Scene / Hierarchy panel -->
+    <!-- Scene / Hierarchy panel (left sidebar) -->
     <div id="mc-scene-panel">
       <div id="mc-scene-panel-hdr">
-        🗂 Scene
-        <div style="display:flex;gap:4px">
-          <button onclick="document.getElementById('mc-code-panel').classList.toggle('mc-code-open')">{}</button>
-          <button onclick="window._dt.undo()">↩</button>
-          <button onclick="window._dt.redo()">↪</button>
+        Scene
+        <div style="display:flex;gap:3px">
+          <button title="Toggle code panel" onclick="document.getElementById('mc-code-panel').classList.toggle('mc-code-open')">{ }</button>
+          <button title="Undo" onclick="window._dt.undo()">↩</button>
+          <button title="Redo" onclick="window._dt.redo()">↪</button>
         </div>
       </div>
       <div id="mc-hier-list"><div class="mc-hier-empty">No objects in scene</div></div>
+
+      <!-- Draw tools (embedded in left panel footer) -->
+      <div id="mc-draw-strip">
+        <div id="mc-draw-strip-lbl">Draw Tools</div>
+        <button class="mc-draw-btn" data-tool="wall">█ Wall<span class="mc-draw-key">W</span></button>
+        <button class="mc-draw-btn" data-tool="road">🛣 Road<span class="mc-draw-key">D</span></button>
+        <button class="mc-draw-btn" data-tool="divider">🟩 Divider<span class="mc-draw-key">I</span></button>
+      </div>
+
+      <!-- File ops (embedded in left panel footer) -->
+      <div id="mc-file-strip">
+        <div id="mc-status-msg"></div>
+        <button id="mc-link-btn">📎 Link .js File</button>
+        <button id="mc-save-btn">💾 Save to File</button>
+        <button id="mc-copy-btn">📋 Copy Code</button>
+      </div>
     </div>
 
-    <!-- Draw tools strip -->
-    <div id="mc-draw-strip">
-      <div id="mc-draw-strip-lbl">DRAW TOOLS</div>
-      <button class="mc-draw-btn" data-tool="wall">█ Wall<span class="mc-draw-key">W</span></button>
-      <button class="mc-draw-btn" data-tool="road">🛣 Road<span class="mc-draw-key">D</span></button>
-      <button class="mc-draw-btn" data-tool="divider">🟩 Divider<span class="mc-draw-key">I</span></button>
+    <!-- Properties panel (right sidebar) -->
+    <div id="mc-props">
+      <div class="mc-props-panel-hdr">Properties</div>
+      <div class="mc-props-empty">
+        <div class="mc-props-empty-icon">⊡</div>
+        <p>Select an object<br>to view properties</p>
+      </div>
     </div>
-
-    <!-- File strip -->
-    <div id="mc-file-strip">
-      <div id="mc-status-msg"></div>
-      <button id="mc-link-btn">📎 Link .js</button>
-      <button id="mc-save-btn">💾 Save File</button>
-      <button id="mc-copy-btn">📋 Copy Code</button>
-    </div>
-
-    <!-- Properties panel -->
-    <div id="mc-props"></div>
 
     <!-- Code panel -->
     <div id="mc-code-panel">
@@ -1228,12 +1224,12 @@ function _buildUI() {
       <pre id="mc-code-pre">// Draw or place objects to generate code</pre>
     </div>
 
-    <!-- Inventory -->
+    <!-- Inventory (object library) -->
     <div id="mc-inventory" class="mc-inv-closed">
       <div id="mc-inv-box">
         <div id="mc-inv-title">
-          🎒 Creative Inventory
-          <button onclick="closeInventory ? closeInventory() : void(0)">✕ Close [E]</button>
+          <div><span class="mc-inv-title-icon">⊞</span>Object Library</div>
+          <button onclick="closeInventory ? closeInventory() : void(0)">✕ Close  [E]</button>
         </div>
         <div id="mc-tabs">${tabsHTML}</div>
         <div id="mc-inv-grid"></div>
@@ -1362,14 +1358,14 @@ export function initDevTool() {
   window._dt.toast = toast;
 
   console.log(
-    '%c🎮 DevTool v4  —  Minecraft Creative Mode\n' +
-    'E=Inventory  1-9=Hotbar  W=Wall  D=Road  I=Divider\n' +
+    '%c🎨 DevTool v4  —  Three-Editor Style\n' +
+    'E=Library  1-9=Hotbar  W=Wall  D=Road  I=Divider\n' +
     'Ctrl+Z=Undo  Ctrl+Y=Redo  F=Focus  Tab=Snap  Del=Delete\n\n' +
     '⚠️ CAMERA FIX — interaction.js orbit handlers mein add karo:\n' +
     '   import { isPlayerActive } from \'./player.js\';\n' +
     '   if (isPlayerActive() || !window._dtCanOrbit()) return;',
-    'color:#ffff55;background:#1a1a1a;font-size:13px;font-weight:bold;padding:4px 8px;'
+    'color:#4d9eff;background:#1a1a1a;font-size:13px;font-weight:bold;padding:4px 8px;'
   );
 
-  toast('🎮 DevTool v4  ·  E = Open Inventory');
+  toast('✏️ Editor ready  ·  E = Open Library');
 }
