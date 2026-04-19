@@ -875,7 +875,7 @@ function _buildUI() {
       --dt-sel:      rgba(77,158,255,0.18);
       --dt-hover:    rgba(255,255,255,0.05);
       --dt-font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      --dt-mono:     'Cascadia Code', 'Consolas', monospace;
+      --dt-mono:     'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
       --dt-panel-w:  210px;
       --dt-props-w:  240px;
     }
@@ -1367,5 +1367,5 @@ export function initDevTool() {
     'color:#4d9eff;background:#1a1a1a;font-size:13px;font-weight:bold;padding:4px 8px;'
   );
 
-  toast('✏️ Editor ready  ·  E = Open Library');
+  toast('✏️ Editor ready  ·  E = Open Object Library');
 }
