@@ -22,13 +22,18 @@ import { mkStreetLight }         from './utils/lights.js';
 import { mkBench, mkCar, mkStreetLamp, mkBin, mkBulletinBoard, mkFountain, mkBikeRack, mkBike, mkFlagPole, mkPicnicTable, mkVendingMachine, mkBusShelter, mkStatue, mkFireHydrant, mkBollard, mkSignpost, mkPaperStand, mkBusStopPole }        from './utils/props.js';
 import { mkWall }                from './utils/wall.js';
 
+
 import {
-  mkRoadStraight, mkRoadIntersection, mkRoadTIntersection, mkRoadCorner,
-  mkFootpath, mkZebraCrossing, mkSpeedBump,
-  mkRoadDivider, mkGrassStrip, mkHedgeRow, mkBush, mkFlowerBed,
-  mkTrafficCone, mkRoadBarrier, mkBarrierRow,
-  mkManhole, mkCurbRow, mkGuardBooth, mkLaneArrow, mkRoundabout
+  mkRoadTile,
+  mkDividerTile,
+  mkHighMastLight,
+  mkDoubleHighMast,
+  mkPaintedCurbRow,
+  mkCampusIntersection,
+  mkCampusZebra,
+  mkCampusSpeedBump,
 } from './utils/roads.js';
+ 
 
 
 // ── Apne custom buildings/objects import karo (examples) ──────────────────
@@ -135,6 +140,67 @@ export const OBJECT_REGISTRY = [
     code:  (pos, rot, scale) => `mkBanyan(${pos.x}, ${pos.z}, ${scale.x.toFixed(2)});`,
   },
 
+
+  // ── Roads ─────────────────────────────────────────────────────────────────
+  {
+    key:'road_tile', icon:'🛣', label:'Road (16u)', group:'Roads',
+    spawn:(x,z)=>mkRoadTile(x,z,0),
+    code:(pos,rot)=>`mkRoadTile(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'road_tile_h', icon:'↔', label:'Road Horizontal', group:'Roads',
+    spawn:(x,z)=>mkRoadTile(x,z,Math.PI/2),
+    code:(pos,rot)=>`mkRoadTile(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'road_intersection', icon:'✛', label:'Intersection', group:'Roads',
+    spawn:(x,z)=>mkCampusIntersection(x,z),
+    code:(pos)=>`mkCampusIntersection(${pos.x},${pos.z});`,
+  },
+  {
+    key:'road_zebra', icon:'🦓', label:'Zebra Crossing', group:'Roads',
+    spawn:(x,z)=>mkCampusZebra(x,z,0),
+    code:(pos,rot)=>`mkCampusZebra(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'road_speedbump', icon:'〰', label:'Speed Bump', group:'Roads',
+    spawn:(x,z)=>mkCampusSpeedBump(x,z,0),
+    code:(pos,rot)=>`mkCampusSpeedBump(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+ 
+  // ── Dividers ──────────────────────────────────────────────────────────────
+  {
+    key:'divider_tile', icon:'🟩', label:'Divider (16u)', group:'Dividers',
+    spawn:(x,z)=>mkDividerTile(x,z,0),
+    code:(pos,rot)=>`mkDividerTile(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'divider_tile_h', icon:'↔', label:'Divider Horiz', group:'Dividers',
+    spawn:(x,z)=>mkDividerTile(x,z,Math.PI/2),
+    code:(pos,rot)=>`mkDividerTile(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'curb_row', icon:'▪', label:'Painted Curb Row', group:'Dividers',
+    spawn:(x,z)=>mkPaintedCurbRow(x,z,0),
+    code:(pos,rot)=>`mkPaintedCurbRow(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+ 
+  // ── Lights ────────────────────────────────────────────────────────────────
+  {
+    key:'high_mast_light', icon:'🏮', label:'High-Mast Light', group:'Lights',
+    spawn:(x,z)=>mkHighMastLight(x,z,0),
+    code:(pos,rot)=>`mkHighMastLight(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'double_mast_light', icon:'💡', label:'Double Mast Light', group:'Lights',
+    spawn:(x,z)=>mkDoubleHighMast(x,z,0),
+    code:(pos,rot)=>`mkDoubleHighMast(${pos.x},${pos.z},${rot.y.toFixed(3)});`,
+  },
+  {
+    key:'streetlight', icon:'🕯', label:'Street Light', group:'Lights',
+    spawn:(x,z)=>mkStreetLight(x,z),
+    code:(pos)=>`mkStreetLight(${pos.x},${pos.z});`,
+  },
   // ──────────────────────────────────────────────────────────────────────────
   // 💡  LIGHTS / STREET FURNITURE
   // ──────────────────────────────────────────────────────────────────────────
@@ -656,6 +722,21 @@ export const OBJECT_REGISTRY = [
   // },
 
 ];
+
+export const DRAWABLE_TYPES = {
+  road: {
+    icon: '🛣', label: 'Draw Road',
+    color: 0x4d9eff,
+    fn: 'mkCampusRoad',
+    // Import karo apne devtool ya main.js mein
+    // import { mkCampusRoad } from './utils/roads.js';
+  },
+  divider: {
+    icon: '🟩', label: 'Draw Divider',
+    color: 0x6aab28,
+    fn: 'mkCampusDivider',
+  },
+};
 
 
 // ════════════════════════════════════════════════════════════════════════════

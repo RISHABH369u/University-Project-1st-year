@@ -1,551 +1,443 @@
+/**
+ * roads.js — PTSNS Campus-accurate road assets
+ *
+ * All "drawable" functions accept (sx, sz, ex, ez) — start & end points,
+ * just like mkWall — so the DevTool road-draw tool works out of the box.
+ *
+ * Static props still use (x, z, rotY).
+ */
+
 import * as THREE from 'three';
-import { scene } from '../scene.js';
+import { scene }  from '../scene.js';
 import { getMat } from '../materials.js';
 
-// ─── Helpers (same pattern as props.js) ─────────────────────────────────────
+// ─── Geometry helpers ────────────────────────────────────────────────────────
 
-function box(w, h, d, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), getMat(color));
-  m.position.set(x, y, z);
-  m.rotation.set(rx, ry, rz);
+function box(w, h, d, col, x=0, y=0, z=0, rx=0, ry=0, rz=0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), getMat(col));
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow = true; m.receiveShadow = true;
   return m;
 }
-
-function cyl(rt, rb, h, segs, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), getMat(color));
-  m.position.set(x, y, z);
-  m.rotation.set(rx, ry, rz);
+function cyl(rt, rb, h, segs, col, x=0, y=0, z=0, rx=0, ry=0, rz=0) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,segs), getMat(col));
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow = true; m.receiveShadow = true;
   return m;
 }
-
-function sph(r, segs, color, x = 0, y = 0, z = 0) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, segs, segs), getMat(color));
-  m.position.set(x, y, z);
+function sph(r, segs, col, x=0, y=0, z=0) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r,segs,segs), getMat(col));
+  m.position.set(x,y,z); m.castShadow = true;
   return m;
 }
+function add(g, ...ms) { ms.forEach(m => g.add(m)); }
 
-function tor(r, tube, rSegs, tSegs, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
-  const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, rSegs, tSegs), getMat(color));
-  m.position.set(x, y, z);
-  m.rotation.set(rx, ry, rz);
-  return m;
+// ─── Shared colours (tuned from photo) ───────────────────────────────────────
+const C = {
+  asphalt:    0x2e2e2e,   // dark road surface
+  asphaltLt:  0x3a3a3a,
+  concrete:   0xbeb8a8,   // light campus concrete pavement
+  concreteDk: 0xa8a298,
+  lineWh:     0xffffff,
+  lineYe:     0xf5d020,
+  curbBase:   0xdddddd,   // unpainted curb
+  curbBlack:  0x101010,   // painted black block (from photo)
+  curbWhite:  0xf0f0f0,   // painted white block
+  hedgeDark:  0x4e7a1e,   // deep green hedge shadow
+  hedgeMid:   0x6aab28,   // main hedge green
+  hedgeLite:  0xa0d040,   // top highlight — bright yellow-green from photo
+  dirt:       0x7a5c30,
+  steel:      0x8899aa,   // galvanized pole colour
+  lampYellow: 0xffee99,   // sodium lamp glow
+  lampGlass:  0x446677,
+  grass:      0x4a8c28,
+  grassLt:    0x62b030,
+  sidewalk:   0xc8c0b0,
+  sidewalkDk: 0xb0a898,
+  kerb:       0xcccccc,
+};
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// INTERNAL: build a road group of given length, centred at origin, along X
+// ════════════════════════════════════════════════════════════════════════════
+
+function _roadGroup(len, laneW = 6.5) {
+  const g = new THREE.Group();
+  const hw = laneW;   // half total road width = one lane each side
+
+  // ── Road surface ──────────────────────────────────────────────────────────
+  add(g, box(len, 0.10, hw*2, C.asphalt, 0, 0, 0));
+
+  // ── Edge white lines ──────────────────────────────────────────────────────
+  add(g, box(len, 0.01, 0.16, C.lineWh, 0, 0.056, -(hw - 0.12)));
+  add(g, box(len, 0.01, 0.16, C.lineWh, 0, 0.056,  (hw - 0.12)));
+
+  // ── Centre dashed yellow line (every 3 u) ─────────────────────────────────
+  const dashCount = Math.max(2, Math.floor(len / 3));
+  const step = len / dashCount;
+  for (let i = 0; i < dashCount; i++) {
+    const ox = -len/2 + step/2 + i * step;
+    add(g, box(step * 0.55, 0.01, 0.14, C.lineYe, ox, 0.056, 0));
+  }
+
+  // ── Micro texture: tyre tracks ────────────────────────────────────────────
+  add(g, box(len, 0.005, 0.22, C.asphaltLt, 0, 0.052, -hw/2));
+  add(g, box(len, 0.005, 0.22, C.asphaltLt, 0, 0.052,  hw/2));
+  add(g, box(len, 0.005, 0.22, C.asphaltLt, 0, 0.052, -hw * 1.5));
+  add(g, box(len, 0.005, 0.22, C.asphaltLt, 0, 0.052,  hw * 1.5));
+
+  // ── Sidewalk strips (each side) ───────────────────────────────────────────
+  const swW = 3.0;
+  add(g, box(len, 0.13, swW, C.sidewalk, 0, 0.055, -(hw + swW/2)));
+  add(g, box(len, 0.13, swW, C.sidewalk, 0, 0.055,  (hw + swW/2)));
+
+  // Sidewalk tile joints
+  const tjStep = 2.0;
+  const tjCount = Math.floor(len / tjStep);
+  for (let i = 0; i <= tjCount; i++) {
+    const ox = -len/2 + i * tjStep;
+    add(g, box(0.05, 0.005, swW, C.sidewalkDk, ox, 0.125, -(hw + swW/2)));
+    add(g, box(0.05, 0.005, swW, C.sidewalkDk, ox, 0.125,  (hw + swW/2)));
+  }
+
+  // ── Kerb between road & sidewalk ─────────────────────────────────────────
+  add(g, box(len, 0.16, 0.22, C.kerb, 0, 0.08,  -(hw + 0.11)));
+  add(g, box(len, 0.16, 0.22, C.kerb, 0, 0.08,   (hw + 0.11)));
+
+  // ── Outer grass margin ────────────────────────────────────────────────────
+  const gmW = 2.5;
+  add(g, box(len, 0.09, gmW, C.grass, 0, 0.04, -(hw + swW + gmW/2)));
+  add(g, box(len, 0.09, gmW, C.grass, 0, 0.04,  (hw + swW + gmW/2)));
+
+  return g;
 }
 
-function add(g, ...meshes) { meshes.forEach(m => g.add(m)); }
 
-function place(g, x, z, rotY = 0) {
+// ════════════════════════════════════════════════════════════════════════════
+// 1.  CAMPUS ROAD  — draw between two points (like wall)
+//     mkCampusRoad(sx, sz, ex, ez)
+// ════════════════════════════════════════════════════════════════════════════
+export function mkCampusRoad(sx, sz, ex, ez) {
+  const dx = ex - sx, dz = ez - sz;
+  const len   = Math.sqrt(dx*dx + dz*dz);
+  const angle = Math.atan2(dx, dz);          // rotation around Y
+
+  const g = _roadGroup(len);
+
+  g.position.set((sx+ex)/2, 0, (sz+ez)/2);
+  g.rotation.y = angle;
+  scene.add(g);
+  return g;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 2.  CAMPUS ROAD — fixed-length tile  (16 u long, rotY for orientation)
+//     Use in objects-registry for quick placement
+// ════════════════════════════════════════════════════════════════════════════
+export function mkRoadTile(x, z, rotY = 0) {
+  const g = _roadGroup(16);
   g.position.set(x, 0, z);
   g.rotation.y = rotY;
   scene.add(g);
   return g;
 }
 
-// ─── COLOR PALETTE ───────────────────────────────────────────────────────────
-const ASPHALT     = 0x2a2a2a;
-const ASPHALT_LT  = 0x3d3d3d;
-const CONCRETE    = 0xc0b89a;
-const CURB        = 0xaaaaaa;
-const LINE_WHITE  = 0xffffff;
-const LINE_YELLOW = 0xffdd00;
-const DIVIDER     = 0xbbbbbb;
-const GRASS       = 0x3a7d44;
-const BUSH_DARK   = 0x2d6b38;
-const BUSH_LITE   = 0x4a9e58;
-const DIRT        = 0x8b6b3a;
-const CONE_ORG    = 0xff6600;
-const BARRIER_WHT = 0xeeeeee;
-const BARRIER_RED = 0xcc1111;
-const PAINT_RED   = 0xdd2222;
-
 
 // ════════════════════════════════════════════════════════════════════════════
-// 1. STRAIGHT ROAD SEGMENT  (8 units wide, 16 units long — 2-lane)
-//    rotY = 0  → runs along Z axis
-//    rotY = Math.PI/2 → runs along X axis
+// 3.  CAMPUS DIVIDER — PTSNS-accurate
+//     Alternating black/white painted curb blocks at base + dense trimmed hedge
+//     mkCampusDivider(sx, sz, ex, ez)
 // ════════════════════════════════════════════════════════════════════════════
-export function mkRoadStraight(x, z, rotY = 0) {
+export function mkCampusDivider(sx, sz, ex, ez) {
+  const dx = ex - sx, dz = ez - sz;
+  const len   = Math.sqrt(dx*dx + dz*dz);
+  const angle = Math.atan2(dx, dz);
+
   const g = new THREE.Group();
 
-  // Asphalt slab
-  add(g, box(16, 0.08, 8, ASPHALT, 0, 0, 0));
+  // ── Concrete base plinth ──────────────────────────────────────────────────
+  add(g, box(len, 0.14, 1.60, C.concreteDk, 0, 0.07, 0));
 
-  // Centre dashed yellow line  (5 dashes)
-  for (let i = -4; i <= 4; i += 2) {
-    add(g, box(1.2, 0.01, 0.1, LINE_YELLOW, i, 0.045, 0));
+  // ── Alternating black/white painted curb blocks ───────────────────────────
+  // Each block: 0.40 wide × 0.26 tall × 1.62 deep
+  // This matches the photo: chunky square painted blocks at base
+  const blockW = 0.40;
+  const count  = Math.floor(len / blockW);
+  for (let i = 0; i < count; i++) {
+    const bx  = -len/2 + blockW/2 + i * blockW;
+    const col = i % 2 === 0 ? C.curbBlack : C.curbWhite;
+    // Front face block
+    add(g, box(blockW - 0.01, 0.28, 0.22, col, bx, 0.28, 0.71));
+    // Back face block
+    add(g, box(blockW - 0.01, 0.28, 0.22, col, bx, 0.28, -0.71));
   }
 
-  // Edge white lines
-  add(g, box(16, 0.01, 0.14, LINE_WHITE, 0, 0.045, -3.8));
-  add(g, box(16, 0.01, 0.14, LINE_WHITE, 0, 0.045,  3.8));
+  // ── Top cap concrete strip ────────────────────────────────────────────────
+  add(g, box(len, 0.06, 1.62, C.concrete, 0, 0.43, 0));
 
-  return place(g, x, z, rotY);
-}
+  // ── Dense hedge body (from photo: bright yellow-green, box-trimmed) ───────
+  // Main bulk — dark green for depth
+  add(g, box(len, 0.70, 1.55, C.hedgeDark, 0, 0.82, 0));
+  // Mid layer
+  add(g, box(len, 0.68, 1.45, C.hedgeMid,  0, 0.87, 0));
+  // Top face — bright yellow-green (the well-lit top surface from photo)
+  add(g, box(len, 0.10, 1.44, C.hedgeLite, 0, 1.20, 0));
+  // Front face highlight
+  add(g, box(len, 0.65, 0.08, C.hedgeLite, 0, 0.84, 0.74));
+  // Back face
+  add(g, box(len, 0.65, 0.08, C.hedgeMid,  0, 0.84, -0.74));
 
-
-// ════════════════════════════════════════════════════════════════════════════
-// 2. ROAD INTERSECTION (4-way, 8×8)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoadIntersection(x, z) {
-  const g = new THREE.Group();
-
-  // Base slab
-  add(g, box(16, 0.08, 16, ASPHALT, 0, 0, 0));
-
-  // Stop lines (all 4 approaches)
-  add(g, box(7.8, 0.01, 0.18, LINE_WHITE,  0, 0.045,  3.6));
-  add(g, box(7.8, 0.01, 0.18, LINE_WHITE,  0, 0.045, -3.6));
-  add(g, box(0.18, 0.01, 7.8, LINE_WHITE,  3.6, 0.045, 0));
-  add(g, box(0.18, 0.01, 7.8, LINE_WHITE, -3.6, 0.045, 0));
-
-  // Centre circle markings
-  tor(0.6, 0.07, 8, 20, LINE_WHITE, 0, 0.046, 0, Math.PI / 2);
-  add(g, tor(0.6, 0.07, 8, 20, LINE_WHITE, 0, 0.046, 0, Math.PI / 2));
-
-  return place(g, x, z);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 3. T-INTERSECTION
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoadTIntersection(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  add(g, box(16, 0.08, 8, ASPHALT, 0, 0, 0));        // main road
-  add(g, box(8,  0.08, 8, ASPHALT, -4, 0, -7.99));   // branch leg (north)
-
-  // Lines
-  add(g, box(16, 0.01, 0.14, LINE_WHITE, 0, 0.045,  3.8));
-  add(g, box(8,  0.01, 0.14, LINE_WHITE, -4, 0.045, -3.8));
-  add(g, box(0.14, 0.01, 8, LINE_WHITE, 0, 0.045, -4));
-
-  for (let i = -4; i <= 4; i += 2)
-    add(g, box(1.2, 0.01, 0.1, LINE_YELLOW, i, 0.045, 0));
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 4. CURVED ROAD CORNER (90°)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoadCorner(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Two overlapping slabs forming an L
-  add(g, box(8, 0.08, 16, ASPHALT, -4, 0,  0));
-  add(g, box(8, 0.08,  8, ASPHALT,  0, 0, -4));
-
-  // Edge lines
-  add(g, box(0.14, 0.01, 16, LINE_WHITE, -7.9, 0.045,  0));
-  add(g, box(8,    0.01, 0.14, LINE_WHITE, -4,  0.045, -7.9));
-  add(g, box(8,    0.01, 0.14, LINE_WHITE,  0,  0.045,  3.9));
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 5. FOOTPATH / PAVEMENT  (16 × 2.5 units)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkFootpath(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Concrete slab
-  add(g, box(16, 0.1, 2.5, CONCRETE, 0, 0.01, 0));
-
-  // Paving tile joints  (horizontal)
-  for (let i = -7; i <= 7; i += 2) {
-    add(g, box(0.04, 0.01, 2.5, 0x999988, i, 0.065, 0));
+  // Small irregular bumps on top for organic feel
+  const bumpStep = 1.5;
+  const bumpCount = Math.floor(len / bumpStep);
+  for (let i = 0; i < bumpCount; i++) {
+    const bx = -len/2 + bumpStep/2 + i * bumpStep;
+    const bump = sph(0.32, 6, C.hedgeLite, bx, 1.25, 0);
+    g.add(bump);
+    const bump2 = sph(0.24, 6, C.hedgeMid, bx + 0.6, 1.22, 0.2);
+    g.add(bump2);
   }
 
-  // Kerb edge
-  add(g, box(16, 0.12, 0.18, CURB, 0, 0.01, 1.15));
-  add(g, box(16, 0.12, 0.18, CURB, 0, 0.01, -1.15));
-
-  return place(g, x, z, rotY);
+  g.position.set((sx+ex)/2, 0, (sz+ez)/2);
+  g.rotation.y = angle;
+  scene.add(g);
+  return g;
 }
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// 6. ZEBRA CROSSING  (6 × 5 units)
+// 4.  DIVIDER TILE — fixed length for quick placement
 // ════════════════════════════════════════════════════════════════════════════
-export function mkZebraCrossing(x, z, rotY = 0) {
+export function mkDividerTile(x, z, rotY = 0) {
+  return mkCampusDivider(
+    x - Math.sin(rotY)*8, z - Math.cos(rotY)*8,
+    x + Math.sin(rotY)*8, z + Math.cos(rotY)*8
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 5.  HIGH-MAST STREET LIGHT — PTSNS-accurate
+//     Tall galvanized octagonal pole, single outreach arm, cobra-head lamp
+// ════════════════════════════════════════════════════════════════════════════
+export function mkHighMastLight(x, z, rotY = 0) {
   const g = new THREE.Group();
 
-  // Base asphalt patch
-  add(g, box(6, 0.085, 5, ASPHALT_LT, 0, 0, 0));
+  // ── Concrete foundation base ──────────────────────────────────────────────
+  add(g, box(0.60, 0.22, 0.60, C.concrete, 0, 0.11, 0));
+  add(g, box(0.50, 0.10, 0.50, C.concreteDk, 0, 0.27, 0));
 
-  // White stripes (8 stripes)
-  for (let i = 0; i < 8; i++) {
-    add(g, box(6, 0.01, 0.38, LINE_WHITE, 0, 0.046, -2.2 + i * 0.6));
+  // ── Main pole — tapered octagonal, 11 units tall ──────────────────────────
+  add(g, cyl(0.085, 0.13, 11.0, 8, C.steel, 0, 5.82, 0));
+
+  // Pole weld rings (detail)
+  add(g, cyl(0.16, 0.16, 0.09, 8, C.steel, 0, 1.0, 0));
+  add(g, cyl(0.14, 0.14, 0.08, 8, C.steel, 0, 3.5, 0));
+  add(g, cyl(0.12, 0.12, 0.07, 8, C.steel, 0, 6.5, 0));
+  add(g, cyl(0.10, 0.10, 0.06, 8, C.steel, 0, 9.8, 0));
+
+  // ── Outreach arm (horizontal + slight upward angle) ───────────────────────
+  // Lower diagonal section (rises at ~15°)
+  const armBase = box(2.8, 0.09, 0.09, C.steel, 1.4, 11.40, 0);
+  armBase.rotation.z = -0.15;
+  g.add(armBase);
+
+  // Upper horizontal reach
+  add(g, box(1.6, 0.07, 0.07, C.steel, 2.85, 11.70, 0));
+
+  // Arm junction detail
+  add(g, cyl(0.10, 0.10, 0.06, 6, C.steel, 0, 11.32, 0));
+  add(g, cyl(0.07, 0.07, 0.04, 6, C.steel, 3.7, 11.74, 0));
+
+  // ── Lamp head — cobra-head style ─────────────────────────────────────────
+  const lampX = 3.65;
+  const lampY = 11.62;
+
+  // Housing shell (slightly squashed box + rounded front)
+  add(g, box(0.72, 0.18, 0.52, C.steel,    lampX,        lampY,       0));
+  add(g, box(0.68, 0.14, 0.50, 0x667788,   lampX,        lampY-0.08,  0));
+
+  // Lens / glass cover (flat underside)
+  add(g, box(0.60, 0.04, 0.44, C.lampGlass,lampX,        lampY-0.12,  0));
+
+  // Lamp glow core (emissive-looking sodium yellow)
+  const glowMat = new THREE.MeshStandardMaterial({
+    color: C.lampYellow,
+    emissive: new THREE.Color(C.lampYellow),
+    emissiveIntensity: 0.9,
+  });
+  const glowMesh = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.03, 0.36), glowMat);
+  glowMesh.position.set(lampX, lampY - 0.10, 0);
+  g.add(glowMesh);
+
+  // Actual point light (small range for perf — increase if you need area lighting)
+  const light = new THREE.PointLight(0xffe8a0, 1.2, 28, 1.5);
+  light.position.set(lampX, lampY - 0.3, 0);
+  light.castShadow = false;  // set true if shadow perf allows
+  g.add(light);
+
+  // Back of housing (finned heat-sink look)
+  for (let f = 0; f < 4; f++) {
+    add(g, box(0.66, 0.02, 0.50, 0x556677, lampX, lampY + 0.08 + f*0.028, 0));
   }
 
-  return place(g, x, z, rotY);
+  // Cable from arm to lamp housing
+  add(g, box(0.04, 0.38, 0.04, 0x333333, lampX - 0.34, lampY + 0.20, 0));
+
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+  return g;
 }
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// 7. SPEED BUMP
+// 6.  DOUBLE HIGH-MAST — arms both sides (for centre island / wide roads)
 // ════════════════════════════════════════════════════════════════════════════
-export function mkSpeedBump(x, z, rotY = 0) {
+export function mkDoubleHighMast(x, z, rotY = 0) {
   const g = new THREE.Group();
 
-  // The bump (flattened cylinder)
-  add(g, cyl(0.12, 0.12, 7.8, 8, ASPHALT_LT, 0, 0.06, 0, 0, 0, Math.PI / 2));
+  // Foundation
+  add(g, box(0.70, 0.24, 0.70, C.concrete, 0, 0.12, 0));
+  add(g, box(0.55, 0.10, 0.55, C.concreteDk, 0, 0.29, 0));
+
+  // Pole
+  add(g, cyl(0.09, 0.14, 11.0, 8, C.steel, 0, 5.82, 0));
+  add(g, cyl(0.17, 0.17, 0.10, 8, C.steel, 0, 1.0, 0));
+  add(g, cyl(0.11, 0.11, 0.07, 8, C.steel, 0, 9.8, 0));
+
+  // Both arms (mirrored)
+  for (const side of [-1, 1]) {
+    const lx = side * 3.65;
+
+    const armBase = box(2.8, 0.09, 0.09, C.steel, side*1.4, 11.40, 0);
+    armBase.rotation.z = side * 0.15;
+    g.add(armBase);
+    add(g, box(1.6, 0.07, 0.07, C.steel, side*2.85, 11.70, 0));
+    add(g, cyl(0.07, 0.07, 0.04, 6, C.steel, side*3.7, 11.74, 0));
+
+    // Lamp head
+    add(g, box(0.72, 0.18, 0.52, C.steel,    lx, 11.62, 0));
+    add(g, box(0.60, 0.04, 0.44, C.lampGlass, lx, 11.50, 0));
+
+    const glowMat = new THREE.MeshStandardMaterial({
+      color: C.lampYellow, emissive: new THREE.Color(C.lampYellow), emissiveIntensity: 0.9,
+    });
+    const gm = new THREE.Mesh(new THREE.BoxGeometry(0.50,0.03,0.36), glowMat);
+    gm.position.set(lx, 11.50, 0); g.add(gm);
+
+    const light = new THREE.PointLight(0xffe8a0, 1.0, 24, 1.5);
+    light.position.set(lx, 11.2, 0);
+    g.add(light);
+  }
+
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+  return g;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 7.  PAINTED CURB ROW — alternating black/white, 8 u long
+//     (standalone, for parking bays, pedestrian areas, etc.)
+// ════════════════════════════════════════════════════════════════════════════
+export function mkPaintedCurbRow(x, z, rotY = 0, numBlocks = 20) {
+  const g = new THREE.Group();
+  const bw = 0.40;
+  const total = bw * numBlocks;
+
+  // Back support ledge
+  add(g, box(total, 0.28, 0.22, C.curbBase, 0, 0.14, 0));
+
+  for (let i = 0; i < numBlocks; i++) {
+    const bx  = -total/2 + bw/2 + i * bw;
+    const col = i % 2 === 0 ? C.curbBlack : C.curbWhite;
+    add(g, box(bw - 0.015, 0.26, 0.21, col, bx, 0.14, 0));
+  }
+
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+  return g;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 8.  ROAD INTERSECTION  (campus-accurate, 14×14)
+// ════════════════════════════════════════════════════════════════════════════
+export function mkCampusIntersection(x, z) {
+  const g = new THREE.Group();
+  const hw = 6.5;
+
+  // Main slab
+  add(g, box(hw*2*2, 0.10, hw*2, C.asphalt, 0, 0, 0));
+  add(g, box(hw*2, 0.10, hw*2*2, C.asphalt, 0, 0.001, 0));
+
+  // Stop lines
+  add(g, box(hw*1.8, 0.01, 0.20, C.lineWh,  0, 0.056,   hw*0.85));
+  add(g, box(hw*1.8, 0.01, 0.20, C.lineWh,  0, 0.056,  -hw*0.85));
+  add(g, box(0.20, 0.01, hw*1.8, C.lineWh,  hw*0.85, 0.056, 0));
+  add(g, box(0.20, 0.01, hw*1.8, C.lineWh, -hw*0.85, 0.056, 0));
+
+  // Corner kerbs
+  for (const sx of [-1,1]) for (const sz of [-1,1]) {
+    add(g, box(0.22, 0.16, 0.22, C.kerb, sx*(hw+0.11), 0.08, sz*(hw+0.11)));
+  }
+
+  g.position.set(x, 0, z);
+  scene.add(g);
+  return g;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 9.  ZEBRA CROSSING — wide campus style
+// ════════════════════════════════════════════════════════════════════════════
+export function mkCampusZebra(x, z, rotY = 0) {
+  const g = new THREE.Group();
+
+  add(g, box(7.0, 0.103, 5.5, C.asphaltLt, 0, 0, 0));
+
+  const stripes = 9;
+  const gapZ = 5.5 / stripes;
+  for (let i = 0; i < stripes; i++) {
+    const zz = -5.5/2 + gapZ/2 + i * gapZ;
+    if (i%2===0) add(g, box(7.0, 0.01, gapZ*0.72, C.lineWh, 0, 0.058, zz));
+  }
+
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+  return g;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 10. SPEED BUMP — wide campus style
+// ════════════════════════════════════════════════════════════════════════════
+export function mkCampusSpeedBump(x, z, rotY = 0) {
+  const g = new THREE.Group();
+
+  // Bump (half-cylinder profile)
+  add(g, cyl(0.10, 0.10, 13, 8, C.asphaltLt, 0, 0.06, 0, 0, 0, Math.PI/2));
 
   // Yellow warning stripes
-  for (let i = -3; i <= 3; i++) {
-    add(g, box(0.28, 0.01, 7.82, LINE_YELLOW, i * 0.9, 0.13, 0));
+  const stripes = 6;
+  const total = 13;
+  const sw = total / (stripes * 2 - 1);
+  for (let i = 0; i < stripes; i++) {
+    add(g, box(sw * 0.9, 0.01, 13.02, C.lineYe, -total/2 + sw/2 + i*(sw*2), 0.11, 0));
   }
 
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 8. ROAD DIVIDER — Concrete median with bushes  (16 × 1.5 units)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoadDivider(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Concrete base
-  add(g, box(16, 0.28, 1.5, CONCRETE, 0, 0.14, 0));
-
-  // Kerb caps
-  add(g, box(16, 0.08, 0.14, CURB, 0, 0.32, 0.71));
-  add(g, box(16, 0.08, 0.14, CURB, 0, 0.32, -0.71));
-
-  // Alternating yellow/white reflective strips
-  for (let i = -7; i <= 7; i += 2) {
-    const col = ((i + 7) / 2) % 2 === 0 ? LINE_YELLOW : DIVIDER;
-    add(g, box(0.9, 0.01, 1.5, col, i, 0.33, 0));
-  }
-
-  // Bush row on top
-  for (let i = -7; i <= 7; i += 3) {
-    const w = 0.5 + Math.random() * 0.4;
-    add(g, sph(w * 0.5, 6, BUSH_DARK, i, 0.62, 0));
-    add(g, sph(w * 0.42, 6, BUSH_LITE, i + 0.2, 0.72, 0.1));
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 9. GRASS STRIP  (16 × 3 units — park-road buffer)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkGrassStrip(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  add(g, box(16, 0.1, 3, GRASS, 0, 0, 0));
-
-  // Kerb on each long edge
-  add(g, box(16, 0.14, 0.2, CURB, 0, 0.05, 1.4));
-  add(g, box(16, 0.14, 0.2, CURB, 0, 0.05, -1.4));
-
-  // Scattered small bushes
-  const positions = [-6, -2, 1, 4, 7, -7.5];
-  for (const xi of positions) {
-    add(g, sph(0.35, 6, BUSH_DARK, xi, 0.3, 0));
-    add(g, sph(0.28, 6, BUSH_LITE, xi + 0.3, 0.38, 0.2));
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 10. HEDGE ROW  (8 units long, trimmed square hedge)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkHedgeRow(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Soil base
-  add(g, box(8, 0.1, 0.7, DIRT, 0, 0.05, 0));
-
-  // Main hedge body
-  add(g, box(8, 0.65, 0.65, BUSH_DARK, 0, 0.45, 0));
-
-  // Top lighter layer (trimmed)
-  add(g, box(7.8, 0.15, 0.6, BUSH_LITE, 0, 0.84, 0));
-
-  // Side face highlights
-  add(g, box(8, 0.65, 0.05, 0x3d8848, 0, 0.45, 0.32));
-  add(g, box(8, 0.65, 0.05, 0x245930, 0, 0.45, -0.32));
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 11. ROUND BUSH (standalone decorative shrub)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkBush(x, z, scale = 1.0) {
-  const g = new THREE.Group();
-
-  // Dirt mound
-  add(g, cyl(0.3 * scale, 0.35 * scale, 0.12, 8, DIRT, 0, 0.06, 0));
-
-  // Layered spheres for volume
-  add(g, sph(0.44 * scale, 7, BUSH_DARK,   0,        0.42 * scale, 0));
-  add(g, sph(0.38 * scale, 7, BUSH_LITE,   0.2*scale, 0.54 * scale, 0.15*scale));
-  add(g, sph(0.32 * scale, 7, BUSH_DARK,  -0.2*scale, 0.52 * scale, -0.1*scale));
-  add(g, sph(0.28 * scale, 7, 0x5cb86a,    0.1*scale, 0.62 * scale, 0.1*scale));
-
-  return place(g, x, z);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 12. FLOWER BED  (2×2 colourful patch)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkFlowerBed(x, z, rotY = 0) {
-  const g = new THREE.Group();
-  const FLOWERS = [0xff3366, 0xff9900, 0xffdd00, 0xcc44ff, 0xff6688, 0xffffff];
-
-  // Soil patch
-  add(g, box(2, 0.08, 2, DIRT, 0, 0.04, 0));
-
-  // Low grass base
-  add(g, box(1.9, 0.06, 1.9, GRASS, 0, 0.1, 0));
-
-  // Flower clumps
-  let fi = 0;
-  for (let xi = -0.65; xi <= 0.65; xi += 0.44) {
-    for (let zi = -0.65; zi <= 0.65; zi += 0.44) {
-      // Stem
-      add(g, cyl(0.015, 0.015, 0.22, 4, 0x2d8b3a, xi, 0.22, zi));
-      // Bloom
-      add(g, sph(0.085, 6, FLOWERS[fi % FLOWERS.length], xi, 0.35, zi));
-      fi++;
-    }
-  }
-
-  // Low border stones
-  for (let i = -4; i <= 4; i++) {
-    add(g, box(0.12, 0.08, 0.12, CURB, i * 0.25, 0.04,  1.04));
-    add(g, box(0.12, 0.08, 0.12, CURB, i * 0.25, 0.04, -1.04));
-    add(g, box(0.12, 0.08, 0.12, CURB,  1.04, 0.04, i * 0.25));
-    add(g, box(0.12, 0.08, 0.12, CURB, -1.04, 0.04, i * 0.25));
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 13. TRAFFIC CONE
-// ════════════════════════════════════════════════════════════════════════════
-export function mkTrafficCone(x, z) {
-  const g = new THREE.Group();
-
-  // Base plate
-  add(g, box(0.38, 0.04, 0.38, ASPHALT_LT, 0, 0.02, 0));
-
-  // Cone body
-  add(g, cyl(0.02, 0.16, 0.52, 10, CONE_ORG, 0, 0.3, 0));
-
-  // White reflective bands
-  add(g, cyl(0.09, 0.1, 0.055, 10, LINE_WHITE, 0, 0.14, 0));
-  add(g, cyl(0.055, 0.07, 0.055, 10, LINE_WHITE, 0, 0.26, 0));
-
-  // Tip
-  add(g, sph(0.025, 6, CONE_ORG, 0, 0.56, 0));
-
-  return place(g, x, z);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 14. ROAD BARRIER / JERSEY BARRIER
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoadBarrier(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Main concrete body (New Jersey profile approximated)
-  add(g, box(2.4, 0.44, 0.62, DIVIDER, 0, 0.22, 0));   // wide base
-  add(g, box(2.4, 0.3,  0.42, DIVIDER, 0, 0.59, 0));    // upper taper
-  add(g, box(2.4, 0.12, 0.26, DIVIDER, 0, 0.8, 0));     // top cap
-
-  // Red/white hazard stripes on ends
-  for (let xi of [-1.2, 1.2]) {
-    for (let s = 0; s < 3; s++) {
-      const col = s % 2 === 0 ? BARRIER_RED : BARRIER_WHT;
-      add(g, box(0.04, 0.26, 0.63, col, xi, 0.35 + s * 0.14, 0));
-    }
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 15. TRAFFIC BARRIER ROW  (chain of 4 barriers)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkBarrierRow(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  for (let i = 0; i < 4; i++) {
-    const offset = -3.6 + i * 2.4;
-    // Body
-    add(g, box(2.36, 0.44, 0.62, DIVIDER, offset, 0.22, 0));
-    add(g, box(2.36, 0.3,  0.42, DIVIDER, offset, 0.59, 0));
-    add(g, box(2.36, 0.12, 0.26, DIVIDER, offset, 0.8,  0));
-    // Hazard end caps
-    const col = i % 2 === 0 ? BARRIER_RED : LINE_YELLOW;
-    add(g, box(0.06, 0.86, 0.64, col, offset - 1.18, 0.43, 0));
-    add(g, box(0.06, 0.86, 0.64, col, offset + 1.18, 0.43, 0));
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 16. MANHOLE COVER
-// ════════════════════════════════════════════════════════════════════════════
-export function mkManhole(x, z) {
-  const g = new THREE.Group();
-
-  // Outer ring
-  add(g, cyl(0.32, 0.32, 0.03, 16, 0x555555, 0, 0.015, 0));
-
-  // Cover plate
-  add(g, cyl(0.28, 0.28, 0.02, 16, 0x444444, 0, 0.02, 0));
-
-  // Grid pattern (4 cross bars)
-  for (let a = 0; a < 4; a++) {
-    const gr = box(0.56, 0.018, 0.04, 0x555555, 0, 0.03, 0, 0, (a * Math.PI) / 4, 0);
-    g.add(gr);
-  }
-
-  return place(g, x, z);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 17. CURB STONE ROW  (decorative painted curb, 8 units)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkCurbRow(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  for (let i = 0; i < 16; i++) {
-    const col = i % 2 === 0 ? LINE_WHITE : PAINT_RED;
-    add(g, box(0.48, 0.16, 0.22, col, -3.75 + i * 0.5, 0.08, 0));
-  }
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 18. GUARD / SECURITY BOOTH  (small entrance booth)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkGuardBooth(x, z, rotY = 0) {
-  const g = new THREE.Group();
-  const WALL = 0xe8e0d0, ROOF = 0x5a3a1a, GLASS = 0x99ccdd;
-
-  // Floor
-  add(g, box(1.8, 0.08, 1.8, CONCRETE, 0, 0.04, 0));
-
-  // Walls
-  add(g, box(1.8, 2.2, 0.12, WALL, 0, 1.18, -0.84));  // back
-  add(g, box(0.12, 2.2, 1.8, WALL, -0.84, 1.18, 0));   // left
-  add(g, box(0.12, 2.2, 1.8, WALL,  0.84, 1.18, 0));   // right
-
-  // Front wall (with window opening)
-  add(g, box(1.8, 0.58, 0.12, WALL, 0, 0.29, 0.84));   // lower
-  add(g, box(1.8, 0.6,  0.12, WALL, 0, 1.98, 0.84));   // upper
-  add(g, box(0.3, 0.9,  0.12, WALL, -0.75, 1.23, 0.84)); // side strip L
-  add(g, box(0.3, 0.9,  0.12, WALL,  0.75, 1.23, 0.84)); // side strip R
-
-  // Window glass
-  add(g, box(1.1, 0.85, 0.06, GLASS, 0, 1.23, 0.84));
-
-  // Sliding window frame
-  add(g, box(1.1, 0.06, 0.07, 0x888888, 0, 0.82, 0.84));
-  add(g, box(1.1, 0.06, 0.07, 0x888888, 0, 1.64, 0.84));
-
-  // Roof (slight overhang)
-  add(g, box(2.1, 0.16, 2.1, ROOF, 0, 2.28, 0));
-
-  // Door (front opening side)
-  add(g, box(0.6, 1.9, 0.06, WALL, 0.55, 1.02, 0.85));
-
-  // Step
-  add(g, box(0.8, 0.1, 0.4, CONCRETE, 0, 0.05, 1.1));
-
-  // Striped barrier arm
-  add(g, cyl(0.03, 0.03, 0.9, 6, 0x555555, 1.2, 1.1, 1.0)); // post
-  const arm = box(3.5, 0.08, 0.08, BARRIER_RED, 1.75, 1.6, 1.0);
-  // Alternating white stripes on arm
-  for (let s = 0; s < 6; s++) {
-    if (s % 2 === 0)
-      g.add(box(0.5, 0.09, 0.09, LINE_WHITE, 0.25 + s * 0.6, 1.6, 1.0));
-  }
-  g.add(arm);
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 19. ROAD LANE MARKING — Arrow (straight ↑)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkLaneArrow(x, z, rotY = 0) {
-  const g = new THREE.Group();
-
-  // Shaft
-  add(g, box(0.18, 0.01, 1.4, LINE_WHITE, 0, 0.046, 0));
-
-  // Arrowhead (two diagonal lines)
-  const l1 = box(0.18, 0.01, 0.62, LINE_WHITE, 0, 0.046, -0.65);
-  l1.rotation.y =  0.55;
-  g.add(l1);
-  const l2 = box(0.18, 0.01, 0.62, LINE_WHITE, 0, 0.046, -0.65);
-  l2.rotation.y = -0.55;
-  g.add(l2);
-
-  return place(g, x, z, rotY);
-}
-
-
-// ════════════════════════════════════════════════════════════════════════════
-// 20. ROUNDABOUT  (radius ~6 units)
-// ════════════════════════════════════════════════════════════════════════════
-export function mkRoundabout(x, z) {
-  const g = new THREE.Group();
-
-  // Outer road ring
-  add(g, cyl(8, 8, 0.08, 32, ASPHALT, 0, 0, 0));
-
-  // Inner island (raised concrete + grass)
-  add(g, cyl(4.5, 4.5, 0.16, 32, CONCRETE, 0, 0.08, 0));
-  add(g, cyl(4.2, 4.2, 0.1, 32, GRASS, 0, 0.22, 0));
-
-  // White dashed circle on road
-  for (let i = 0; i < 18; i++) {
-    const angle = (i / 18) * Math.PI * 2;
-    const rx = Math.cos(angle) * 6.0;
-    const rz = Math.sin(angle) * 6.0;
-    const dash = box(0.9, 0.01, 0.15, LINE_WHITE, rx, 0.046, rz);
-    dash.rotation.y = -angle;
-    g.add(dash);
-  }
-
-  // Centre decorative bushes
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const bx = Math.cos(angle) * 2.5;
-    const bz = Math.sin(angle) * 2.5;
-    g.add(sph(0.55, 7, BUSH_DARK, bx, 0.5, bz));
-    g.add(sph(0.44, 7, BUSH_LITE, bx + 0.2, 0.65, bz + 0.2));
-  }
-  // Centre feature (small fountain-like stub)
-  add(g, cyl(0.35, 0.4, 0.55, 12, CONCRETE, 0, 0.52, 0));
-  add(g, sph(0.3, 8, 0x9e9e8e, 0, 0.9, 0));
-
-  return place(g, x, z);
+  // End reflectors
+  add(g, box(0.15, 0.13, 0.15, 0xff3300, -total/2, 0.10, 0));
+  add(g, box(0.15, 0.13, 0.15, 0xff3300,  total/2, 0.10, 0));
+
+  g.position.set(x, 0, z);
+  g.rotation.y = rotY;
+  scene.add(g);
+  return g;
 }
