@@ -1,10 +1,25 @@
 /**
- * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  devtool.js v3.3 — FIXES:                                                ║
- * ║  • Wall draw now hits EXACTLY where you click (stale matrix fix)         ║
- * ║  • Camera no longer orbits while dragging TC gizmo (capture block)       ║
- * ║  Wall (W) · Road (D) · Divider (I) · Add (A)                             ║
- * ╚══════════════════════════════════════════════════════════════════════════╝
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  devtool.js v4  —  Minecraft Creative Mode Style                    ║
+ * ║──────────────────────────────────────────────────────────────────────║
+ * ║  E         → Open / Close Inventory                                  ║
+ * ║  1–9       → Select hotbar slot                                      ║
+ * ║  Click     → Place / Select object                                   ║
+ * ║  W/D/R/S   → Draw Wall / Road / Divider / Scale tool                 ║
+ * ║  G/T/Y     → Move / Rotate / …                                       ║
+ * ║  Ctrl+Z/Y  → Undo / Redo                                             ║
+ * ║  Ctrl+D    → Clone   Del → Delete   F → Focus   Tab → Snap           ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
+ * SETUP in main.js:
+ *   import { initDevTool, updateDevTool } from './devtool.js';
+ *   // in animate(): updateDevTool();
+ *   initDevTool();
+ *
+ * CAMERA FIX — interaction.js orbit handlers TOP pe yeh add karo:
+ *   import { isPlayerActive } from './player.js';
+ *   // pointerdown / mousemove / wheel handlers mein:
+ *   if (isPlayerActive() || !window._dtCanOrbit()) return;
  */
 
 import * as THREE from 'three';
@@ -14,16 +29,33 @@ import { mkWall }          from './utils/wall.js';
 import { mkCampusRoad }    from './utils/roads.js';
 import { mkCampusDivider } from './utils/roads.js';
 import { buildObjDefs }    from './objects-registry.js';
-import { appMode }         from './controls.js'; // <-- NEW IMPORT
+import { isPlayerActive }  from './player.js';
 
 const OBJ_DEFS = buildObjDefs();
 
-// ══════════════════════════════════════════════════════════════════════════
-// §1  STATE
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §1  HOTBAR DEFINITION  (9 slots — fixed tools + draw tools)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HOTBAR_SLOTS = [
+  { id: 'select',    icon: '↖', label: 'Select',   color: '#4d9eff', type: 'tool' },
+  { id: 'translate', icon: '✥', label: 'Move',     color: '#4d9eff', type: 'tool' },
+  { id: 'rotate',    icon: '↻', label: 'Rotate',   color: '#ff9f43', type: 'tool' },
+  { id: 'scale',     icon: '⊞', label: 'Scale',    color: '#ff9f43', type: 'tool' },
+  { id: 'wall',      icon: '█', label: 'Wall',     color: '#c8c8c8', type: 'draw' },
+  { id: 'road',      icon: '🛣', label: 'Road',     color: '#6aab28', type: 'draw' },
+  { id: 'divider',   icon: '🟩', label: 'Divider', color: '#6aab28', type: 'draw' },
+  { id: null,        icon: '',  label: '',          color: '',        type: 'empty' },
+  { id: null,        icon: '',  label: '',          color: '',        type: 'empty' },
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §2  STATE
+// ══════════════════════════════════════════════════════════════════════════════
 
 const STATE = {
   tool:           'select',
+  activeSlot:     0,          // 0-8 hotbar slot
   objects:        [],
   selected:       [],
   undoStack:      [],
@@ -31,20 +63,25 @@ const STATE = {
   snapSize:       0.5,
   drawStart:      null,
   drawMode:       null,
-  pendingType:    null,
+  pendingType:    null,       // object type to place on click
   fileHandle:     null,
-  isDragging:     false,
   isDraggingTC:   false,
   transformSpace: 'world',
   showGrid:       true,
+  inventoryOpen:  false,
+  invTab:         null,       // active inventory tab (group name)
   _uid:           0,
 };
 
-window._dtCanOrbit = () => !STATE.isDraggingTC;
+// Camera lock API — interaction.js mein add karo: if (!window._dtCanOrbit()) return;
+window._dtCanOrbit = () => !STATE.isDraggingTC && !isPlayerActive();
 
-// ══════════════════════════════════════════════════════════════════════════
-// §2  HELPERS
-// ══════════════════════════════════════════════════════════════════════════
+const DRAW_TOOLS  = ['wall', 'road', 'divider'];
+const DRAW_HEX    = { wall: 0x4d9eff, road: 0x6aab28, divider: 0xd4a017 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §3  HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
 
 const _ray   = new THREE.Raycaster();
 const _mouse = new THREE.Vector2();
@@ -54,84 +91,69 @@ const _iPt   = new THREE.Vector3();
 function _gndPt(e) {
   camera.updateMatrixWorld(true);
   const r = renderer.domElement.getBoundingClientRect();
-  _mouse.x =  ((e.clientX - r.left) / r.width)  *  2 - 1;
-  _mouse.y = -((e.clientY - r.top)  / r.height) *  2 + 1;
+  _mouse.x =  ((e.clientX - r.left) / r.width)  * 2 - 1;
+  _mouse.y = -((e.clientY - r.top)  / r.height) * 2 + 1;
   _ray.setFromCamera(_mouse, camera);
-  if (!_ray.ray.intersectPlane(_gnd, _iPt)) return new THREE.Vector3();
-  return _iPt.clone();
+  return _ray.ray.intersectPlane(_gnd, _iPt) ? _iPt.clone() : new THREE.Vector3();
 }
 
 function snap(v) { return Math.round(v / STATE.snapSize) * STATE.snapSize; }
 function fmt(n)  { return +parseFloat(n).toFixed(2); }
 function uid()   { return `o${++STATE._uid}_${Date.now()}`; }
 
-const DRAW_HEX = { wall: 0x00d4ff, road: 0x4d9eff, divider: 0x6aab28 };
-const DRAW_TOOLS = ['wall', 'road', 'divider'];
-
-// ══════════════════════════════════════════════════════════════════════════
-// §3  GRID
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §4  GRID
+// ══════════════════════════════════════════════════════════════════════════════
 
 const _grid = new THREE.GridHelper(400, 200, 0x444455, 0x252535);
-_grid.material.opacity = 0.3;
-_grid.material.transparent = true;
+_grid.material.opacity = 0.25; _grid.material.transparent = true;
 scene.add(_grid);
 
-// ══════════════════════════════════════════════════════════════════════════
-// §4  TRANSFORM CONTROLS
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §5  TRANSFORM CONTROLS + CAMERA LOCK
+// ══════════════════════════════════════════════════════════════════════════════
 
 const TC = new TransformControls(camera, renderer.domElement);
-TC.setSize(0.9);
+TC.setSize(0.85);
 TC.setSpace(STATE.transformSpace);
 
 TC.addEventListener('dragging-changed', e => {
   STATE.isDraggingTC = e.value;
-  STATE.isDragging   = e.value;
   if (controls) controls.enabled = !e.value;
   _blocker(e.value);
 });
-
 TC.addEventListener('objectChange', () => {
-  _refreshSel(); _updateProps(); _schedSave(); _updateHier();
+  _refreshSel(); _renderProps(); _schedSave(); _updateHierList();
 });
-
 scene.add(TC);
 
-function _captureKill(e) {
-  if (STATE.isDraggingTC) e.stopImmediatePropagation();
+// Capture-phase killer — stops orbit events reaching interaction.js while TC active
+function _tcKill(e) { if (STATE.isDraggingTC) e.stopImmediatePropagation(); }
+for (const ev of ['mousemove','mousedown','pointermove','pointerdown']) {
+  renderer.domElement.addEventListener(ev, _tcKill, true);
+  window.addEventListener(ev, _tcKill, true);
 }
-
-renderer.domElement.addEventListener('mousemove',   _captureKill, true);
-renderer.domElement.addEventListener('mousedown',   _captureKill, true);
-renderer.domElement.addEventListener('pointermove', _captureKill, true);
-renderer.domElement.addEventListener('pointerdown', _captureKill, true);
-window.addEventListener('mousemove', _captureKill, true);
-window.addEventListener('mousedown', _captureKill, true);
 
 let _blk = null;
 function _blocker(on) {
   if (on && !_blk) {
     _blk = document.createElement('div');
-    _blk.style.cssText = 'position:fixed;inset:0;z-index:8888;cursor:grabbing;';
+    _blk.style.cssText = 'position:fixed;inset:0;z-index:8000;cursor:grabbing;';
     document.body.appendChild(_blk);
-  } else if (!on && _blk) {
-    _blk.remove(); _blk = null;
-  }
+  } else if (!on && _blk) { _blk.remove(); _blk = null; }
 }
 
 window.addEventListener('pointerup', () => {
   if (!TC.dragging) {
     STATE.isDraggingTC = false;
-    STATE.isDragging   = false;
     if (controls) controls.enabled = true;
     _blocker(false);
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════════
-// §5  SELECTION
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §6  SELECTION
+// ══════════════════════════════════════════════════════════════════════════════
 
 const _selBox = new THREE.BoxHelper(new THREE.Mesh(), 0x4d9eff);
 _selBox.visible = false;
@@ -151,30 +173,31 @@ function _refreshSel() {
   _selBox.visible = true;
 }
 
-function selObj(mesh, add = false) {
-  if (!add) { STATE.selected = []; TC.detach(); }
+function selObj(mesh, additive = false) {
+  if (!additive) { STATE.selected = []; TC.detach(); }
   if (mesh) {
     let r = mesh;
     while (r.parent && !STATE.objects.find(e => e.mesh === r)) r = r.parent;
     if (!STATE.selected.includes(r)) STATE.selected.push(r);
     if (STATE.selected.length === 1) TC.attach(STATE.selected[0]); else TC.detach();
   }
-  _refreshSel(); _updateProps(); _updateHier();
+  _refreshSel(); _renderProps(); _updateHierList();
 }
 
 function clrSel() {
   STATE.selected = []; TC.detach(); _selBox.visible = false;
-  _updateProps(); _updateHier();
+  _renderProps(); _updateHierList();
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §6  REGISTRY
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §7  OBJECT REGISTRY
+// ══════════════════════════════════════════════════════════════════════════════
 
 function reg(mesh, type, params = {}, label = null) {
-  const e = { mesh, type, params, id: uid(), label: label || OBJ_DEFS[type]?.label || type, hidden: false };
+  const e = { mesh, type, params, id: uid(),
+              label: label || OBJ_DEFS[type]?.label || type, hidden: false };
   STATE.objects.push(e);
-  _updateCode(); _updateSB(); _updateHier();
+  _updateCode(); _updateSB(); _updateHierList();
   return e;
 }
 
@@ -182,50 +205,41 @@ function unreg(mesh) {
   const i = STATE.objects.findIndex(e => e.mesh === mesh);
   if (i > -1) STATE.objects.splice(i, 1);
   scene.remove(mesh);
-  _updateCode(); _updateSB(); _updateHier();
+  _updateCode(); _updateSB(); _updateHierList();
 }
 
-function spawn(type, x, z) {
+function spawnObj(type, x, z) {
   const def = OBJ_DEFS[type]; if (!def) return null;
   const m = def.spawn(fmt(x), fmt(z));
   reg(m, type, { sx: fmt(x), sz: fmt(z) });
   return m;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §7  DRAW TOOL (wall / road / divider)
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §8  DRAW TOOL  (wall / road / divider)
+// ══════════════════════════════════════════════════════════════════════════════
 
 let _drawLine = null, _drawMarker = null;
 
 function _drawStart(mode, pt) {
   STATE.drawMode  = mode;
   STATE.drawStart = pt.clone();
-
   const col = DRAW_HEX[mode];
   const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  _drawLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: col }));
-  scene.add(_drawLine);
-
-  _drawMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35, 8, 8),
-    new THREE.MeshBasicMaterial({ color: col })
-  );
+  _drawLine   = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: col }));
+  _drawMarker = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: col }));
   _drawMarker.position.set(pt.x, 0.5, pt.z);
-  scene.add(_drawMarker);
-
-  const names = { wall: 'Wall', road: 'Road', divider: 'Divider' };
-  toast(`🟠 ${names[mode]} started — Dbl-click to finish | Shift: straight`);
+  scene.add(_drawLine); scene.add(_drawMarker);
+  _setHUD(`${mode === 'wall' ? '█' : mode === 'road' ? '🛣' : '🟩'} Dbl-click to finish · Shift=straight`);
 }
 
 function _drawUpdate(end) {
   if (!_drawLine || !STATE.drawStart) return;
   const pos = _drawLine.geometry.attributes.position;
   pos.setXYZ(0, STATE.drawStart.x, 0.3, STATE.drawStart.z);
-  pos.setXYZ(1, end.x, 0.3, end.z);
-  pos.needsUpdate = true;
+  pos.setXYZ(1, end.x, 0.3, end.z); pos.needsUpdate = true;
   const dx = end.x - STATE.drawStart.x, dz = end.z - STATE.drawStart.z;
-  _setHUD(`📏 ${Math.sqrt(dx * dx + dz * dz).toFixed(2)} u`);
+  _setHUD(`📏 ${Math.sqrt(dx * dx + dz * dz).toFixed(2)} u · Dbl-click to finish`);
 }
 
 function _drawClear() {
@@ -236,37 +250,32 @@ function _drawClear() {
 
 function _drawFinish(end) {
   const { x: sx, z: sz } = STATE.drawStart, { x: ex, z: ez } = end;
-  const dx = ex - sx, dz = ez - sz;
-  const len = fmt(Math.sqrt(dx * dx + dz * dz));
+  const len = fmt(Math.sqrt((ex-sx)**2 + (ez-sz)**2));
   _pushUndo();
-
-  let mesh, label;
+  let mesh, label, type;
   if (STATE.drawMode === 'wall') {
-    mesh  = mkWall(sx, sz, ex, ez);
+    mesh = mkWall(sx, sz, ex, ez); type = 'wall';
     label = `Wall ${STATE.objects.filter(o => o.type === 'wall').length + 1}`;
-    reg(mesh, 'wall', { sx, sz, ex, ez, length: len }, label);
-    toast('✅ Wall placed');
+    toast('✅ Wall placed  ' + len + ' u');
   } else if (STATE.drawMode === 'road') {
-    mesh  = mkCampusRoad(sx, sz, ex, ez);
+    mesh = mkCampusRoad(sx, sz, ex, ez); type = '_road';
     label = `Road ${STATE.objects.filter(o => o.type === '_road').length + 1}`;
-    reg(mesh, '_road', { sx, sz, ex, ez, length: len }, label);
-    toast(`✅ Road placed (${len} u)`);
-  } else if (STATE.drawMode === 'divider') {
-    mesh  = mkCampusDivider(sx, sz, ex, ez);
+    toast('✅ Road placed  ' + len + ' u');
+  } else {
+    mesh = mkCampusDivider(sx, sz, ex, ez); type = '_divider';
     label = `Divider ${STATE.objects.filter(o => o.type === '_divider').length + 1}`;
-    reg(mesh, '_divider', { sx, sz, ex, ez, length: len }, label);
-    toast(`✅ Divider placed (${len} u)`);
+    toast('✅ Divider placed  ' + len + ' u');
   }
-
+  reg(mesh, type, { sx, sz, ex, ez, length: len }, label);
   _drawClear();
   if (mesh) selObj(mesh);
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §8  UNDO / REDO
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §9  UNDO / REDO
+// ══════════════════════════════════════════════════════════════════════════════
 
-function _snap() {
+function _snapState() {
   return STATE.objects.map(({ id, type, params, label, hidden, mesh }) => ({
     id, type, params: { ...params }, label, hidden,
     pos:   [...mesh.position.toArray()],
@@ -276,15 +285,22 @@ function _snap() {
 }
 
 function _pushUndo() {
-  STATE.undoStack.push(_snap());
+  STATE.undoStack.push(_snapState());
   if (STATE.undoStack.length > 60) STATE.undoStack.shift();
   STATE.redoStack = [];
 }
 
-function undo() { if (!STATE.undoStack.length) return; STATE.redoStack.push(_snap()); _applySnap(STATE.undoStack.pop()); toast('↩'); }
-function redo() { if (!STATE.redoStack.length) return; STATE.undoStack.push(_snap()); _applySnap(STATE.redoStack.pop()); toast('↪'); }
+function undo() {
+  if (!STATE.undoStack.length) return;
+  STATE.redoStack.push(_snapState()); _restoreSnap(STATE.undoStack.pop()); toast('↩ Undo');
+}
 
-function _applySnap(snap) {
+function redo() {
+  if (!STATE.redoStack.length) return;
+  STATE.undoStack.push(_snapState()); _restoreSnap(STATE.redoStack.pop()); toast('↪ Redo');
+}
+
+function _restoreSnap(snap) {
   const ids = new Set(snap.map(s => s.id));
   [...STATE.objects].forEach(e => { if (!ids.has(e.id)) unreg(e.mesh); });
   snap.forEach(s => {
@@ -294,7 +310,7 @@ function _applySnap(snap) {
       e.mesh.visible = !s.hidden; e.hidden = s.hidden; e.label = s.label;
     } else {
       let mesh = null;
-      if      (s.type === 'wall')     mesh = mkWall(s.params.sx, s.params.sz, s.params.ex, s.params.ez);
+      if (s.type === 'wall')     mesh = mkWall(s.params.sx, s.params.sz, s.params.ex, s.params.ez);
       else if (s.type === '_road')    mesh = mkCampusRoad(s.params.sx, s.params.sz, s.params.ex, s.params.ez);
       else if (s.type === '_divider') mesh = mkCampusDivider(s.params.sx, s.params.sz, s.params.ex, s.params.ez);
       else { const def = OBJ_DEFS[s.type]; if (def) mesh = def.spawn(s.params.sx, s.params.sz); }
@@ -305,46 +321,41 @@ function _applySnap(snap) {
       }
     }
   });
-  clrSel(); _updateCode(); _updateHier(); _updateSB();
+  clrSel(); _updateCode(); _updateHierList(); _updateSB();
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §9  ALIGN
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §10  ALIGN
+// ══════════════════════════════════════════════════════════════════════════════
 
 const ALIGN = {
-  minX: ()    => _aa('x', 'min'),    maxX: ()    => _aa('x', 'max'),
-  centerX: () => _aa('x', 'center'), minZ: ()    => _aa('z', 'min'),
-  maxZ: ()    => _aa('z', 'max'),    centerZ: () => _aa('z', 'center'),
-  groundY() {
-    if (!STATE.selected.length) return;
-    _pushUndo(); STATE.selected.forEach(m => m.position.y = 0); _schedSave(); toast('⬇ Y=0');
-  },
-  distributeX: () => _dist('x'),
-  distributeZ: () => _dist('z'),
+  minX:()=>_aa('x','min'),  maxX:()=>_aa('x','max'),  centerX:()=>_aa('x','center'),
+  minZ:()=>_aa('z','min'),  maxZ:()=>_aa('z','max'),  centerZ:()=>_aa('z','center'),
+  groundY() { if (!STATE.selected.length) return; _pushUndo(); STATE.selected.forEach(m => m.position.y = 0); _schedSave(); toast('⬇ Y=0'); },
+  distributeX: () => _dist('x'), distributeZ: () => _dist('z'),
 };
 
 function _aa(ax, mo) {
-  if (STATE.selected.length < 2) { toast('⚠️ Select 2+ objects'); return; }
+  if (STATE.selected.length < 2) { toast('⚠ Select 2+ objects'); return; }
   _pushUndo();
   const vs = STATE.selected.map(m => m.position[ax]);
-  const t  = mo === 'min' ? Math.min(...vs) : mo === 'max' ? Math.max(...vs) : (Math.min(...vs) + Math.max(...vs)) / 2;
+  const t = mo === 'min' ? Math.min(...vs) : mo === 'max' ? Math.max(...vs) : (Math.min(...vs)+Math.max(...vs))/2;
   STATE.selected.forEach(m => m.position[ax] = t);
-  _updateCode(); toast(`✅ Align ${ax.toUpperCase()} ${mo}`);
+  _updateCode(); toast(`Aligned ${ax.toUpperCase()}`);
 }
 
 function _dist(ax) {
-  if (STATE.selected.length < 3) { toast('⚠️ Select 3+ objects'); return; }
+  if (STATE.selected.length < 3) { toast('⚠ Select 3+ objects'); return; }
   _pushUndo();
   const s = [...STATE.selected].sort((a, b) => a.position[ax] - b.position[ax]);
-  const f = s[0].position[ax], l = s[s.length - 1].position[ax];
-  s.forEach((m, i) => m.position[ax] = f + ((l - f) / (s.length - 1)) * i);
-  _updateCode(); toast(`↔ Distribute ${ax.toUpperCase()}`);
+  const f = s[0].position[ax], l = s[s.length-1].position[ax];
+  s.forEach((m, i) => m.position[ax] = f + ((l-f)/(s.length-1))*i);
+  _updateCode(); toast(`Distributed ${ax.toUpperCase()}`);
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §10  CODE GENERATION
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §11  CODE GENERATION
+// ══════════════════════════════════════════════════════════════════════════════
 
 const BS = '// ── DevTool: Generated Objects START ──';
 const BE = '// ── DevTool: Generated Objects END ──';
@@ -352,7 +363,7 @@ const BE = '// ── DevTool: Generated Objects END ──';
 function _generateCode() {
   const lines = [BS];
   for (const { mesh, type, params } of STATE.objects) {
-    const p = { x: fmt(mesh.position.x), y: fmt(mesh.position.y), z: fmt(mesh.position.z) };
+    const p = { x:fmt(mesh.position.x), y:fmt(mesh.position.y), z:fmt(mesh.position.z) };
     if      (type === 'wall')     lines.push(`mkWall(${params.sx},${params.sz},${params.ex},${params.ez});`);
     else if (type === '_road')    lines.push(`mkCampusRoad(${params.sx},${params.sz},${params.ex},${params.ez});`);
     else if (type === '_divider') lines.push(`mkCampusDivider(${params.sx},${params.sz},${params.ex},${params.ez});`);
@@ -363,18 +374,17 @@ function _generateCode() {
 }
 
 function _updateCode() {
-  const el = document.getElementById('dt-code-text');
+  const el = document.getElementById('mc-code-pre');
   if (el) el.textContent = _generateCode();
   _schedSave();
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §11  PERSISTENCE
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §12  PERSISTENCE
+// ══════════════════════════════════════════════════════════════════════════════
 
-const LS_KEY = 'devtool_v33_scene';
+const LS_KEY = 'devtool_v4_scene';
 let _saveT = null;
-
 function _schedSave() {
   clearTimeout(_saveT);
   _saveT = setTimeout(() => {
@@ -385,182 +395,68 @@ function _schedSave() {
       scale: mesh.scale.toArray(),
     }));
     localStorage.setItem(LS_KEY, JSON.stringify(data));
-    _setFS('💾 Auto-saved');
+    _flashStatus('💾 Saved');
   }, 800);
 }
 
 async function _linkFile() {
-  if (!window.showOpenFilePicker) { toast('❌ Chrome/Edge required'); return; }
+  if (!window.showOpenFilePicker) { toast('❌ Chrome/Edge needed'); return; }
   try {
-    [STATE.fileHandle] = await window.showOpenFilePicker({
-      types: [{ description: 'JS', accept: { 'text/javascript': ['.js'] } }],
-    });
-    document.getElementById('dt-link-btn').textContent = `📎 ${STATE.fileHandle.name}`;
-    toast('✅ Linked');
+    [STATE.fileHandle] = await window.showOpenFilePicker({ types: [{ description: 'JS', accept: { 'text/javascript': ['.js'] } }] });
+    document.getElementById('mc-link-btn').textContent = `📎 ${STATE.fileHandle.name}`;
+    toast('✅ Linked: ' + STATE.fileHandle.name);
   } catch {}
 }
 
 async function _saveToFile() {
-  if (!STATE.fileHandle) { toast('⚠️ Link .js first!'); return; }
+  if (!STATE.fileHandle) { toast('⚠ Link a .js file first'); return; }
   try {
-    const f   = await STATE.fileHandle.getFile();
-    let c     = await f.text();
-    const nb  = _generateCode();
-    const eS  = BS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const eE  = BE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const f = await STATE.fileHandle.getFile(); let c = await f.text();
+    const nb = _generateCode();
+    const eS = BS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const eE = BE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pat = new RegExp(`${eS}[\\s\\S]*?${eE}`, 'g');
     c = c.match(pat) ? c.replace(pat, nb) : c + '\n\n' + nb + '\n';
-    const w = await STATE.fileHandle.createWritable();
-    await w.write(c); await w.close();
-    _setFS('✅ Saved!'); toast('✅ Saved!');
-  } catch (err) { toast(`❌ ${err.message}`); }
+    const w = await STATE.fileHandle.createWritable(); await w.write(c); await w.close();
+    _flashStatus('✅ Saved to file'); toast('✅ Saved!');
+  } catch (err) { toast('❌ ' + err.message); }
 }
 
-function _setFS(m) {
-  const el = document.getElementById('dt-file-status');
-  if (el) { el.textContent = m; setTimeout(() => el.textContent = '', 3000); }
+function _flashStatus(msg) {
+  const el = document.getElementById('mc-status-msg');
+  if (el) { el.textContent = msg; setTimeout(() => el.textContent = '', 3000); }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §12  PROPERTIES PANEL
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §13  TOOL / SLOT SWITCHING
+// ══════════════════════════════════════════════════════════════════════════════
 
-function _updateProps() { requestAnimationFrame(_renderProps); }
+function setSlot(idx) {
+  STATE.activeSlot = idx;
+  const slot = HOTBAR_SLOTS[idx];
 
-function _renderProps() {
-  const panel = document.getElementById('dt-props-body'); if (!panel) return;
-  if (!STATE.selected.length) {
-    panel.innerHTML = `<div class="dt-empty">Nothing selected<br><span>Click or draw an object</span></div>`;
-    const ap = document.getElementById('dt-align-panel'); if (ap) ap.style.display = 'none';
+  // Update hotbar visual
+  document.querySelectorAll('.mc-hb-slot').forEach((el, i) => {
+    el.classList.toggle('mc-hb-selected', i === idx);
+  });
+
+  if (!slot || slot.type === 'empty') {
+    // Empty slot — if we have a pending type from inventory, keep it
+    if (!STATE.pendingType) setTool('select');
     return;
   }
 
-  const mesh  = STATE.selected[0];
-  const entry = STATE.objects.find(e => e.mesh === mesh);
-  const p = mesh.position, r = mesh.rotation, s = mesh.scale;
-  const bbox = new THREE.Box3().setFromObject(mesh), dim = new THREE.Vector3();
-  bbox.getSize(dim);
-
-  const ap = document.getElementById('dt-align-panel');
-  if (ap) ap.style.display = STATE.selected.length >= 2 ? 'block' : 'none';
-
-  const DRAWN     = ['wall', '_road', '_divider'];
-  const isDrawn   = DRAWN.includes(entry?.type);
-  const typeIcon  = entry?.type === '_road' ? '🛣' : entry?.type === '_divider' ? '🟩' : entry?.type === 'wall' ? '█' : OBJ_DEFS[entry?.type]?.icon || '⬛';
-  const typeLabel = entry?.type === '_road' ? 'Road' : entry?.type === '_divider' ? 'Divider' : entry?.type === 'wall' ? 'Wall' : OBJ_DEFS[entry?.type]?.label || entry?.type || 'Object';
-
-  panel.innerHTML = `
-    <div class="dt-prop-section">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-        <div class="dt-prop-tag">${typeIcon} ${typeLabel}</div>
-        ${STATE.selected.length > 1 ? `<span style="font-size:10px;color:#666">${STATE.selected.length} selected</span>` : ''}
-      </div>
-      <input class="dt-label-input" id="dt-label-field" value="${entry?.label || ''}" placeholder="Label…">
-    </div>
-    ${isDrawn ? `<div class="dt-prop-section"><div class="dt-dim-badge">📏 Length: <b>${entry?.params?.length ?? '?'} u</b></div></div>` : ''}
-    <div class="dt-prop-section">
-      <div class="dt-prop-head">DIMENSIONS (read-only)</div>
-      <div class="dt-dim-row">
-        <span>W <b>${fmt(dim.x)}</b></span>
-        <span>H <b>${fmt(dim.y)}</b></span>
-        <span>D <b>${fmt(dim.z)}</b></span>
-      </div>
-    </div>
-    <div class="dt-prop-section"><div class="dt-prop-head">POSITION</div>${_xyz('pos', fmt(p.x), fmt(p.y), fmt(p.z))}</div>
-    <div class="dt-prop-section"><div class="dt-prop-head">ROTATION °</div>${_xyz('rot', fmt(THREE.MathUtils.radToDeg(r.x)), fmt(THREE.MathUtils.radToDeg(r.y)), fmt(THREE.MathUtils.radToDeg(r.z)))}</div>
-    <div class="dt-prop-section"><div class="dt-prop-head">SCALE</div>${_xyz('scale', fmt(s.x), fmt(s.y), fmt(s.z))}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:10px">
-      <button class="dt-btn" onclick="window._dt.duplicate()">⧉ Clone</button>
-      <button class="dt-btn" onclick="window._dt.toggleHide()">👁 Hide</button>
-      <button class="dt-btn" onclick="window._dt.focusSelected()">🎯 Focus</button>
-      <button class="dt-btn dt-btn-danger" onclick="window._dt.deleteSelected()">🗑 Delete</button>
-    </div>`;
-
-  document.getElementById('dt-label-field')?.addEventListener('change', e => {
-    if (entry) { entry.label = e.target.value; _updateHier(); }
-  });
-  panel.querySelectorAll('.dt-xyz-input').forEach(inp => {
-    inp.addEventListener('change', () => {
-      const val = parseFloat(inp.value);
-      const { prop, axis } = inp.dataset;
-      if (isNaN(val)) return;
-      _pushUndo();
-      STATE.selected.forEach(m => {
-        if (prop === 'pos')   m.position[axis] = val;
-        if (prop === 'rot')   m.rotation[axis]  = THREE.MathUtils.degToRad(val);
-        if (prop === 'scale') m.scale[axis]      = val;
-      });
-      _refreshSel(); _updateCode();
-    });
-  });
-}
-
-function _xyz(prop, x, y, z) {
-  return `<div class="dt-xyz-row">${['x','y','z'].map((a, i) =>
-    `<label class="dt-xyz-col">
-      <span class="dt-axis-${a}">${a.toUpperCase()}</span>
-      <input class="dt-xyz-input" data-prop="${prop}" data-axis="${a}" type="number"
-        value="${[x, y, z][i]}" step="${prop === 'rot' ? 1 : 0.1}">
-    </label>`).join('')}</div>`;
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// §13  HIERARCHY
-// ══════════════���═══════════════════════════════════════════════════════════
-
-function _updateHier() {
-  const list = document.getElementById('dt-hierarchy-list'); if (!list) return;
-  if (!STATE.objects.length) {
-    list.innerHTML = `<div class="dt-hier-empty">Scene is empty</div>`; return;
+  if (slot.type === 'tool' || slot.type === 'draw') {
+    STATE.pendingType = null;
+    setTool(slot.id);
   }
-  list.innerHTML = STATE.objects.map((entry, i) => {
-    const isSel = STATE.selected.includes(entry.mesh);
-    const icon  = entry.type === '_road' ? '🛣' : entry.type === '_divider' ? '🟩' : entry.type === 'wall' ? '█' : OBJ_DEFS[entry.type]?.icon || '⬛';
-    return `<div class="dt-hier-item${isSel ? ' dt-hier-active' : ''}${entry.hidden ? ' dt-hier-hidden' : ''}" data-idx="${i}">
-      <span class="dt-hier-icon">${icon}</span>
-      <span class="dt-hier-label">${entry.label}</span>
-      <div class="dt-hier-actions">
-        <button class="dt-hier-vis" data-idx="${i}">${entry.hidden ? '🚫' : '👁'}</button>
-        <button class="dt-hier-del" data-idx="${i}">×</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.dt-hier-item').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('.dt-hier-actions')) return;
-      const entry = STATE.objects[+el.dataset.idx];
-      if (entry) selObj(entry.mesh, e.ctrlKey || e.metaKey);
-    });
-  });
-  list.querySelectorAll('.dt-hier-vis').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const entry = STATE.objects[+btn.dataset.idx];
-      if (entry) { entry.hidden = !entry.hidden; entry.mesh.visible = !entry.hidden; _updateHier(); }
-    });
-  });
-  list.querySelectorAll('.dt-hier-del').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const entry = STATE.objects[+btn.dataset.idx];
-      if (entry) {
-        _pushUndo();
-        STATE.selected = STATE.selected.filter(m => m !== entry.mesh);
-        if (!STATE.selected.length) TC.detach();
-        unreg(entry.mesh); _updateProps(); toast('🗑');
-      }
-    });
-  });
 }
-
-// ══════════════════════════════════════════════════════════════════════════
-// §14  TOOL SWITCHING
-// ══════════════════════════════════════════════════════════════════════════
 
 function setTool(tool) {
   STATE.tool = tool;
-  document.querySelectorAll('.dt-tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+
+  // Update toolbar buttons
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('mc-active', b.dataset.tool === tool));
 
   if      (tool === 'translate') { TC.setMode('translate'); if (STATE.selected.length) TC.attach(STATE.selected[0]); }
   else if (tool === 'rotate')    { TC.setMode('rotate');    if (STATE.selected.length) TC.attach(STATE.selected[0]); }
@@ -569,70 +465,247 @@ function setTool(tool) {
   else                           { TC.detach(); }
 
   if (!DRAW_TOOLS.includes(tool) && STATE.drawStart) _drawClear();
-  const pal = document.getElementById('dt-add-palette');
-  if (pal) pal.style.display = tool === 'add' ? 'flex' : 'none';
   if (!DRAW_TOOLS.includes(tool)) _setHUD('');
   _updateSB();
 }
 
-const KEY_TOOL = { v: 'select', g: 'translate', r: 'rotate', s: 'scale', w: 'wall', d: 'road', i: 'divider', a: 'add' };
+// ══════════════════════════════════════════════════════════════════════════════
+// §14  INVENTORY
+// ══════════════════════════════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════════════════════
+function openInventory() {
+  STATE.inventoryOpen = true;
+  const inv = document.getElementById('mc-inventory');
+  if (inv) { inv.classList.add('mc-inv-open'); inv.classList.remove('mc-inv-closed'); }
+  // Focus first tab if none selected
+  if (!STATE.invTab) {
+    const firstTab = document.querySelector('.mc-tab');
+    if (firstTab) { STATE.invTab = firstTab.dataset.group; _renderInvGrid(); _updateTabs(); }
+  }
+}
+
+function closeInventory() {
+  STATE.inventoryOpen = false;
+  const inv = document.getElementById('mc-inventory');
+  if (inv) { inv.classList.remove('mc-inv-open'); inv.classList.add('mc-inv-closed'); }
+}
+
+function toggleInventory() {
+  STATE.inventoryOpen ? closeInventory() : openInventory();
+}
+
+function _renderInvGrid() {
+  const grid = document.getElementById('mc-inv-grid'); if (!grid) return;
+  const group = STATE.invTab;
+  const items = Object.entries(OBJ_DEFS).filter(([, def]) => def.group === group);
+  grid.innerHTML = items.map(([key, def]) => `
+    <div class="mc-inv-item" data-key="${key}" title="${def.label}">
+      <div class="mc-inv-icon">${def.icon || '⬛'}</div>
+      <div class="mc-inv-name">${def.label}</div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('.mc-inv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.key;
+      STATE.pendingType = key;
+      // Put in last hotbar slot as "held item"
+      HOTBAR_SLOTS[7] = { id: key, icon: OBJ_DEFS[key]?.icon || '⬛', label: OBJ_DEFS[key]?.label || key, color: '#fff', type: 'place' };
+      _rebuildHotbar();
+      setSlot(7);
+      setTool('add');
+      closeInventory();
+      toast(`🖐 Holding: ${OBJ_DEFS[key]?.label}  — Click ground to place`);
+    });
+  });
+}
+
+function _updateTabs() {
+  document.querySelectorAll('.mc-tab').forEach(t => t.classList.toggle('mc-tab-active', t.dataset.group === STATE.invTab));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // §15  STATUS BAR & HUD
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 
 function _updateSB() {
-  const el = document.getElementById('dt-statusbar'); if (!el) return;
-  const names = { select: 'SELECT ↖', translate: 'MOVE ✥', rotate: 'ROTATE ↻', scale: 'SCALE ⊞', wall: 'WALL █', road: 'ROAD 🛣', divider: 'DIVIDER 🟩', add: 'ADD ＋' };
-  el.querySelector('#dt-sb-tool').textContent    = names[STATE.tool] || STATE.tool.toUpperCase();
-  el.querySelector('#dt-sb-objects').textContent = `Objects: ${STATE.objects.length}`;
-  el.querySelector('#dt-sb-snap').textContent    = `Snap:${STATE.snapSize}`;
-  el.querySelector('#dt-sb-space').textContent   = STATE.transformSpace === 'world' ? '🌐 World' : '📦 Local';
+  const tool = document.getElementById('mc-sb-tool');
+  if (tool) {
+    const names = { select:'SELECT ↖', translate:'MOVE ✥', rotate:'ROTATE ↻', scale:'SCALE ⊞', wall:'WALL █', road:'ROAD 🛣', divider:'DIVIDER 🟩', add:'PLACE' };
+    tool.textContent = names[STATE.tool] || STATE.tool.toUpperCase();
+  }
+  const objs = document.getElementById('mc-sb-objs'); if (objs) objs.textContent = `${STATE.objects.length} objects`;
+  const snp  = document.getElementById('mc-sb-snap'); if (snp)  snp.textContent  = `Snap: ${STATE.snapSize}`;
+  const sp   = document.getElementById('mc-sb-space'); if (sp)  sp.textContent   = STATE.transformSpace === 'world' ? '🌐 World' : '📦 Local';
+
+  if (STATE.pendingType) {
+    const held = document.getElementById('mc-held');
+    if (held) held.textContent = `🖐 ${OBJ_DEFS[STATE.pendingType]?.label || STATE.pendingType}`;
+  } else {
+    const held = document.getElementById('mc-held'); if (held) held.textContent = '';
+  }
 }
 
 function _updateCursor(x, z) {
-  const el = document.getElementById('dt-sb-cursor');
-  if (el) el.textContent = `X:${fmt(x)}  Z:${fmt(z)}`;
+  const el = document.getElementById('mc-sb-cursor'); if (el) el.textContent = `${fmt(x)}, ${fmt(z)}`;
 }
 
 function _setHUD(t) {
-  const el = document.getElementById('dt-wall-hud');
-  if (!el) return;
-  el.textContent   = t;
-  el.style.display = t ? 'block' : 'none';
+  const el = document.getElementById('mc-hud'); if (!el) return;
+  el.textContent = t; el.style.display = t ? 'block' : 'none';
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §16  EVENTS
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §16  PROPERTIES PANEL
+// ══════════════════════════════════════════════════════════════════════════════
+
+function _renderProps() {
+  const panel = document.getElementById('mc-props');
+  if (!panel) return;
+
+  if (!STATE.selected.length) {
+    panel.style.display = 'none'; return;
+  }
+  panel.style.display = 'block';
+
+  const mesh = STATE.selected[0];
+  const entry = STATE.objects.find(e => e.mesh === mesh);
+  const p = mesh.position, r = mesh.rotation, s = mesh.scale;
+  const bbox = new THREE.Box3().setFromObject(mesh), dim = new THREE.Vector3();
+  bbox.getSize(dim);
+
+  const DRAWN = ['wall','_road','_divider'];
+  const icon  = DRAWN.includes(entry?.type) ? (entry.type==='wall'?'█':entry.type==='_road'?'🛣':'🟩') : OBJ_DEFS[entry?.type]?.icon||'⬛';
+  const label = DRAWN.includes(entry?.type) ? (entry.type==='wall'?'Wall':entry.type==='_road'?'Road':'Divider') : OBJ_DEFS[entry?.type]?.label||entry?.type||'Object';
+
+  panel.innerHTML = `
+    <div class="mc-props-head">
+      <span class="mc-props-icon">${icon}</span>
+      <input class="mc-props-label" id="mc-prop-label" value="${entry?.label||''}" placeholder="Label">
+      <button class="mc-props-close" onclick="document.getElementById('mc-props').style.display='none'">×</button>
+    </div>
+    <div class="mc-props-type">${label}${entry?.params?.length?' · '+entry.params.length+' u':''}</div>
+    <div class="mc-prop-dim">
+      <span>W ${fmt(dim.x)}</span><span>H ${fmt(dim.y)}</span><span>D ${fmt(dim.z)}</span>
+    </div>
+    ${_mkXYZ('pos',fmt(p.x),fmt(p.y),fmt(p.z),'Position')}
+    ${_mkXYZ('rot',fmt(THREE.MathUtils.radToDeg(r.x)),fmt(THREE.MathUtils.radToDeg(r.y)),fmt(THREE.MathUtils.radToDeg(r.z)),'Rotation °')}
+    ${_mkXYZ('scale',fmt(s.x),fmt(s.y),fmt(s.z),'Scale')}
+    ${STATE.selected.length >= 2 ? `
+    <div class="mc-props-section-head">Align</div>
+    <div class="mc-align-row">
+      <button onclick="window._dt.align.minX()">←X</button>
+      <button onclick="window._dt.align.centerX()">·X</button>
+      <button onclick="window._dt.align.maxX()">X→</button>
+      <button onclick="window._dt.align.minZ()">←Z</button>
+      <button onclick="window._dt.align.centerZ()">·Z</button>
+      <button onclick="window._dt.align.maxZ()">Z→</button>
+      <button onclick="window._dt.align.groundY()">⬇Y0</button>
+      <button onclick="window._dt.align.distributeX()">↔X</button>
+      <button onclick="window._dt.align.distributeZ()">↔Z</button>
+    </div>` : ''}
+    <div class="mc-action-row">
+      <button onclick="window._dt.duplicate()">⧉ Clone</button>
+      <button onclick="window._dt.toggleHide()">👁</button>
+      <button onclick="window._dt.focusSelected()">🎯</button>
+      <button class="mc-delete" onclick="window._dt.deleteSelected()">🗑</button>
+    </div>
+  `;
+
+  document.getElementById('mc-prop-label')?.addEventListener('change', e => {
+    if (entry) { entry.label = e.target.value; _updateHierList(); }
+  });
+
+  panel.querySelectorAll('.mc-xyz-inp').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const val = parseFloat(inp.value); if (isNaN(val)) return;
+      const { prop, axis } = inp.dataset;
+      _pushUndo();
+      STATE.selected.forEach(m => {
+        if (prop==='pos') m.position[axis] = val;
+        if (prop==='rot') m.rotation[axis] = THREE.MathUtils.degToRad(val);
+        if (prop==='scale') m.scale[axis] = val;
+      });
+      _refreshSel(); _updateCode();
+    });
+  });
+}
+
+function _mkXYZ(prop, x, y, z, lbl) {
+  return `<div class="mc-xyz">
+    <div class="mc-xyz-lbl">${lbl}</div>
+    <div class="mc-xyz-row">
+      ${['x','y','z'].map((a,i)=>`<label><span class="mc-ax-${a}">${a.toUpperCase()}</span><input class="mc-xyz-inp" data-prop="${prop}" data-axis="${a}" type="number" value="${[x,y,z][i]}" step="${prop==='rot'?1:0.1}"></label>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §17  HIERARCHY LIST
+// ══════════════════════════════════════════════════════════════════════════════
+
+function _updateHierList() {
+  const list = document.getElementById('mc-hier-list'); if (!list) return;
+  if (!STATE.objects.length) { list.innerHTML = '<div class="mc-hier-empty">No objects in scene</div>'; return; }
+  list.innerHTML = STATE.objects.map((entry, i) => {
+    const isSel = STATE.selected.includes(entry.mesh);
+    const DRAWN = ['wall','_road','_divider'];
+    const icon = DRAWN.includes(entry.type) ? (entry.type==='wall'?'█':entry.type==='_road'?'🛣':'🟩') : OBJ_DEFS[entry.type]?.icon||'⬛';
+    return `<div class="mc-hier-row${isSel?' mc-hier-sel':''}${entry.hidden?' mc-hier-hid':''}" data-idx="${i}">
+      <span>${icon}</span>
+      <span class="mc-hier-name">${entry.label}</span>
+      <div class="mc-hier-acts">
+        <button class="mc-hier-eye" data-idx="${i}">${entry.hidden?'🚫':'👁'}</button>
+        <button class="mc-hier-del" data-idx="${i}">×</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.mc-hier-row').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.mc-hier-acts')) return;
+      const en = STATE.objects[+el.dataset.idx]; if (en) selObj(en.mesh, e.ctrlKey || e.metaKey);
+    });
+  });
+  list.querySelectorAll('.mc-hier-eye').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); const en=STATE.objects[+btn.dataset.idx]; if(en){en.hidden=!en.hidden;en.mesh.visible=!en.hidden;_updateHierList();} });
+  });
+  list.querySelectorAll('.mc-hier-del').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); const en=STATE.objects[+btn.dataset.idx]; if(en){_pushUndo();STATE.selected=STATE.selected.filter(m=>m!==en.mesh);if(!STATE.selected.length)TC.detach();unreg(en.mesh);_renderProps();toast('🗑');} });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §18  EVENTS
+// ══════════════════════════════════════════════════════════════════════════════
 
 function _onMove(e) {
-  if (STATE.isDraggingTC) return;
+  if (isPlayerActive() || STATE.isDraggingTC) return;
   const pt = _gndPt(e);
-  const sx = snap(pt.x), sz = snap(pt.z);
-  _updateCursor(sx, sz);
-
+  _updateCursor(snap(pt.x), snap(pt.z));
   if (DRAW_TOOLS.includes(STATE.tool) && STATE.drawStart) {
-    let ex = sx, ez = sz;
-    if (e.shiftKey) {
-      const dx = Math.abs(ex - STATE.drawStart.x), dz = Math.abs(ez - STATE.drawStart.z);
-      dx > dz ? ez = STATE.drawStart.z : ex = STATE.drawStart.x;
-    }
+    let ex = snap(pt.x), ez = snap(pt.z);
+    if (e.shiftKey) { const dx=Math.abs(ex-STATE.drawStart.x),dz=Math.abs(ez-STATE.drawStart.z); dx>dz?ez=STATE.drawStart.z:ex=STATE.drawStart.x; }
     _drawUpdate(new THREE.Vector3(ex, 0, ez));
   }
   if (STATE.selected.length === 1 && !TC.dragging) _refreshSel();
 }
 
 function _onClick(e) {
-  if (appMode === 'PLAY') return; // <-- NEW CHECK
+  if (isPlayerActive() || STATE.inventoryOpen) return;
   if (e.detail > 1 || TC.dragging || STATE.isDraggingTC) return;
-  const tool = STATE.tool, pt = _gndPt(e);
 
-  if (['select', 'translate', 'rotate', 'scale'].includes(tool)) {
+  // Close props if clicking outside
+  const props = document.getElementById('mc-props');
+  if (props && !props.contains(e.target) && !renderer.domElement.contains(e.target)) return;
+
+  const tool = STATE.tool; const pt = _gndPt(e);
+
+  if (['select','translate','rotate','scale'].includes(tool)) {
     camera.updateMatrixWorld(true);
     const rc = renderer.domElement.getBoundingClientRect();
-    _mouse.x =  ((e.clientX - rc.left) / rc.width)  *  2 - 1;
-    _mouse.y = -((e.clientY - rc.top)  / rc.height) *  2 + 1;
+    _mouse.x = ((e.clientX-rc.left)/rc.width)*2-1;
+    _mouse.y = -((e.clientY-rc.top)/rc.height)*2+1;
     _ray.setFromCamera(_mouse, camera);
     const hits = _ray.intersectObjects(STATE.objects.map(o => o.mesh), true);
     if (hits.length) {
@@ -645,363 +718,658 @@ function _onClick(e) {
 
   if (tool === 'add' && STATE.pendingType) {
     _pushUndo();
-    const m = spawn(STATE.pendingType, snap(pt.x), snap(pt.z));
+    const m = spawnObj(STATE.pendingType, snap(pt.x), snap(pt.z));
     if (m) { selObj(m); toast(`✅ ${OBJ_DEFS[STATE.pendingType]?.label} placed`); }
   }
 }
 
 function _onDblClick(e) {
-  if (appMode === 'PLAY') return; // <-- NEW CHECK
-  if (!DRAW_TOOLS.includes(STATE.tool)) return;
+  if (isPlayerActive() || !DRAW_TOOLS.includes(STATE.tool)) return;
   const pt = _gndPt(e);
   let ex = snap(pt.x), ez = snap(pt.z);
-
   if (e.shiftKey && STATE.drawStart) {
-    const dx = Math.abs(ex - STATE.drawStart.x), dz = Math.abs(ez - STATE.drawStart.z);
-    dx > dz ? ez = STATE.drawStart.z : ex = STATE.drawStart.x;
+    const dx=Math.abs(ex-STATE.drawStart.x),dz=Math.abs(ez-STATE.drawStart.z); dx>dz?ez=STATE.drawStart.z:ex=STATE.drawStart.x;
   }
-
-  if (!STATE.drawStart) {
-    _drawStart(STATE.tool, new THREE.Vector3(ex, 0, ez));
-  } else {
-    _drawFinish(new THREE.Vector3(ex, 0, ez));
-  }
+  if (!STATE.drawStart) { _drawStart(STATE.tool, new THREE.Vector3(ex,0,ez)); }
+  else                  { _drawFinish(new THREE.Vector3(ex,0,ez)); }
 }
 
 function _onKey(e) {
-  if (appMode === 'PLAY') return; // <-- NEW CHECK
+  if (isPlayerActive()) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   const k = e.key.toLowerCase();
 
-  if (!e.ctrlKey && KEY_TOOL[k])              { setTool(KEY_TOOL[k]); return; }
-  if (e.ctrlKey  && k === 'z')                { e.preventDefault(); undo(); return; }
-  if (e.ctrlKey  && k === 'y')                { e.preventDefault(); redo(); return; }
-  if (e.ctrlKey  && k === 'd')                { e.preventDefault(); window._dt.duplicate(); return; }
-  if (k === 'delete' || k === 'backspace')    { window._dt.deleteSelected(); return; }
-  if (k === 'escape')                         { _drawClear(); clrSel(); STATE.pendingType = null; setTool('select'); return; }
-  if (k === 'tab')  { e.preventDefault(); const sizes=[0.1,0.25,0.5,1.0,2.0]; STATE.snapSize=sizes[(sizes.indexOf(STATE.snapSize)+1)%sizes.length]; toast(`📐 Snap: ${STATE.snapSize}`); _updateSB(); return; }
-  if (k === 'f')    { window._dt.focusSelected(); return; }
-  if (k === 'g' && !e.ctrlKey) { STATE.showGrid=!STATE.showGrid; _grid.visible=STATE.showGrid; toast(STATE.showGrid?'▦ Grid ON':'▦ Grid OFF'); return; }
-  if (k === 'l')    { STATE.transformSpace=STATE.transformSpace==='world'?'local':'world'; TC.setSpace(STATE.transformSpace); toast(`🔄 ${STATE.transformSpace.toUpperCase()}`); _updateSB(); return; }
-  if (k === 'h')    { window._dt.toggleHide(); return; }
-  if (k === ' ')    { e.preventDefault(); TC.visible=!TC.visible; return; }
-  if (['x','y','z'].includes(k) && !e.ctrlKey) { TC.showX=k==='x'; TC.showY=k==='y'; TC.showZ=k==='z'; return; }
-  if (k === 'q')    { TC.showX=true; TC.showY=true; TC.showZ=true; }
+  // Inventory
+  if (k === 'e' && !e.ctrlKey) { toggleInventory(); return; }
+  if (k === 'escape') { if (STATE.inventoryOpen) { closeInventory(); return; } _drawClear(); clrSel(); STATE.pendingType=null; setTool('select'); return; }
+
+  // Hotbar number keys
+  if (!e.ctrlKey && k >= '1' && k <= '9') { setSlot(parseInt(k)-1); return; }
+
+  // Undo/Redo/Clone
+  if (e.ctrlKey && k==='z') { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey && k==='y') { e.preventDefault(); redo(); return; }
+  if (e.ctrlKey && k==='d') { e.preventDefault(); window._dt.duplicate(); return; }
+
+  // Delete
+  if (k==='delete'||k==='backspace') { window._dt.deleteSelected(); return; }
+
+  // Snap cycle
+  if (k==='tab') { e.preventDefault(); const sz=[0.1,0.25,0.5,1.0,2.0]; STATE.snapSize=sz[(sz.indexOf(STATE.snapSize)+1)%sz.length]; toast(`Snap: ${STATE.snapSize}`); _updateSB(); return; }
+
+  // Focus / Grid / Space
+  if (k==='f') { window._dt.focusSelected(); return; }
+  if (k==='g'&&!e.ctrlKey) { STATE.showGrid=!STATE.showGrid; _grid.visible=STATE.showGrid; toast(STATE.showGrid?'Grid ON':'Grid OFF'); return; }
+  if (k==='l') { STATE.transformSpace=STATE.transformSpace==='world'?'local':'world'; TC.setSpace(STATE.transformSpace); _updateSB(); return; }
+  if (k==='h') { window._dt.toggleHide(); return; }
+  if (k===' ') { e.preventDefault(); TC.visible=!TC.visible; return; }
+
+  // Axis lock
+  if (['x','y','z'].includes(k)&&!e.ctrlKey) { TC.showX=k==='x'; TC.showY=k==='y'; TC.showZ=k==='z'; return; }
+  if (k==='q') { TC.showX=true; TC.showY=true; TC.showZ=true; }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §17  GLOBAL API
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §19  GLOBAL API
+// ══════════════════════════════════════════════════════════════════════════════
 
 window._dt = {
   deleteSelected() {
-    if (!STATE.selected.length) return;
-    _pushUndo();
-    STATE.selected.forEach(m => unreg(m));
-    STATE.selected = []; TC.detach(); _selBox.visible = false;
-    _updateProps(); toast('🗑 Deleted');
+    if (!STATE.selected.length) return; _pushUndo();
+    STATE.selected.forEach(m => unreg(m)); STATE.selected=[]; TC.detach(); _selBox.visible=false;
+    _renderProps(); toast('🗑 Deleted');
   },
   duplicate() {
     if (!STATE.selected.length) return;
-    const mesh  = STATE.selected[0];
-    const entry = STATE.objects.find(e => e.mesh === mesh);
-    if (!entry) return;
-    if (['wall','_road','_divider'].includes(entry.type)) { toast('⚠️ Draw types cannot be cloned'); return; }
+    const mesh=STATE.selected[0], entry=STATE.objects.find(e=>e.mesh===mesh);
+    if (!entry||['wall','_road','_divider'].includes(entry.type)){toast('⚠ Cannot clone draw objects');return;}
     _pushUndo();
-    const m = spawn(entry.type, mesh.position.x + STATE.snapSize * 2, mesh.position.z + STATE.snapSize * 2);
+    const m = spawnObj(entry.type, mesh.position.x+STATE.snapSize*2, mesh.position.z+STATE.snapSize*2);
     if (m) { m.rotation.copy(mesh.rotation); m.scale.copy(mesh.scale); selObj(m); toast('⧉ Cloned'); }
   },
   toggleHide() {
     if (!STATE.selected.length) return;
-    STATE.selected.forEach(m => {
-      const e = STATE.objects.find(o => o.mesh === m);
-      if (e) { e.hidden = !e.hidden; m.visible = !e.hidden; }
-    });
-    _updateHier(); toast('👁');
+    STATE.selected.forEach(m=>{const e=STATE.objects.find(o=>o.mesh===m);if(e){e.hidden=!e.hidden;m.visible=!e.hidden;}});
+    _updateHierList(); toast('👁 Toggled');
   },
   focusSelected() {
     if (!STATE.selected.length) return;
-    const t = new THREE.Vector3();
-    STATE.selected.forEach(m => t.add(m.position));
-    t.divideScalar(STATE.selected.length);
-    if (controls) { controls.target.copy(t); controls.update(); }
-    toast('🎯 Focused');
+    const t=new THREE.Vector3(); STATE.selected.forEach(m=>t.add(m.position)); t.divideScalar(STATE.selected.length);
+    if (controls){controls.target.copy(t);controls.update();} toast('🎯 Focused');
   },
   align: ALIGN, undo, redo,
-  getCode:     _generateCode,
-  getState:    () => STATE,
-  getObjects:  () => STATE.objects,
-  getRegistry: () => OBJ_DEFS,
+  getCode: _generateCode, getState: ()=>STATE, getObjects: ()=>STATE.objects,
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-// §18  TOAST
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §20  TOAST
+// ══════════════════════════════════════════════════════════════════════════════
 
 let _toastT = null;
 function toast(msg) {
-  const el = document.getElementById('dt-toast'); if (!el) return;
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(_toastT);
-  _toastT = setTimeout(() => el.classList.remove('show'), 2500);
+  const el = document.getElementById('mc-toast'); if (!el) return;
+  el.textContent = msg; el.classList.add('mc-toast-show');
+  clearTimeout(_toastT); _toastT = setTimeout(()=>el.classList.remove('mc-toast-show'), 2400);
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §19  UI
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §21  HOTBAR REBUILD  (when inventory selection changes)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function _rebuildHotbar() {
+  const hb = document.getElementById('mc-hotbar'); if (!hb) return;
+  hb.innerHTML = HOTBAR_SLOTS.map((slot, i) => {
+    const key = i+1;
+    const isEmpty = slot.type === 'empty';
+    return `<div class="mc-hb-slot${i===STATE.activeSlot?' mc-hb-selected':''}" data-slot="${i}" title="${slot.label||''}">
+      <span class="mc-hb-key">${key}</span>
+      <span class="mc-hb-icon" style="${slot.color?'color:'+slot.color:''}">${slot.icon||''}</span>
+      ${!isEmpty?`<span class="mc-hb-label">${slot.label}</span>`:''}
+    </div>`;
+  }).join('');
+  hb.querySelectorAll('.mc-hb-slot').forEach(el => {
+    el.addEventListener('click', () => setSlot(+el.dataset.slot));
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §22  UI CONSTRUCTION
+// ══════════════════════════════════════════════════════════════════════════════
 
 function _buildUI() {
+
+  // Build inventory groups from OBJ_DEFS
+  const groups = {};
+  for (const [k, def] of Object.entries(OBJ_DEFS))
+    (groups[def.group] = groups[def.group] || []).push({ k, def });
+  STATE.invTab = Object.keys(groups)[0] || null;
+
+  const tabsHTML = Object.keys(groups).map(g =>
+    `<button class="mc-tab${g===STATE.invTab?' mc-tab-active':''}" data-group="${g}">${g}</button>`
+  ).join('');
+
+  // CSS ──────────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
   style.textContent = `
-    :root{--dt-bg:#111113;--dt-panel:#181820;--dt-border:#2c2c3c;--dt-accent:#4d9eff;--dt-accent2:#9b6fff;--dt-rd:#6aab28;--dt-text:#c8c8d4;--dt-text2:#66667a;--dt-hover:#232330;--dt-active:#1a4a88;--dt-danger:#ff4d4d;--dt-success:#4caf50;--dt-x:#ff4d4d;--dt-y:#6aab28;--dt-z:#4d9eff}
-    #dt-root *{box-sizing:border-box;margin:0}#dt-root{font-family:'Segoe UI',system-ui,sans-serif;font-size:12px;color:var(--dt-text)}
-    #dt-root ::-webkit-scrollbar{width:4px}#dt-root ::-webkit-scrollbar-thumb{background:#2c2c3c;border-radius:4px}
-    #dt-toolbar{position:fixed;left:10px;top:50%;transform:translateY(-50%);background:var(--dt-panel);border:1px solid var(--dt-border);border-radius:14px;padding:8px 5px;display:flex;flex-direction:column;gap:5px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-    .dt-tool-btn{width:36px;height:36px;border-radius:9px;border:none;background:transparent;color:var(--dt-text2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;position:relative}
-    .dt-tool-btn:hover{background:var(--dt-hover);color:var(--dt-text)}.dt-tool-btn.active{background:var(--dt-active);color:var(--dt-accent);box-shadow:0 0 0 1px var(--dt-accent)}
-    .dt-tool-btn[data-tool="road"].active{background:#0d3a12;color:var(--dt-rd);box-shadow:0 0 0 1px var(--dt-rd)}.dt-tool-btn[data-tool="divider"].active{background:#1a380d;color:var(--dt-rd);box-shadow:0 0 0 1px var(--dt-rd)}
-    .dt-tool-btn .dt-tt{display:none;position:absolute;left:44px;top:50%;transform:translateY(-50%);background:#0c0c14;color:var(--dt-text);padding:4px 10px;border-radius:6px;white-space:nowrap;font-size:10px;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.5);z-index:10}
-    .dt-tool-btn:hover .dt-tt{display:block}.dt-tb-sep{height:1px;background:var(--dt-border);margin:3px 4px}
-    #dt-right{position:fixed;right:0;top:0;width:240px;height:100vh;display:flex;flex-direction:column;z-index:9998;overflow:hidden;background:var(--dt-panel);border-left:1px solid var(--dt-border);box-shadow:-4px 0 24px rgba(0,0,0,.4)}
-    .dt-panel-hdr{padding:6px 10px 5px;font-size:9px;font-weight:700;color:var(--dt-text2);text-transform:uppercase;letter-spacing:1.4px;border-bottom:1px solid var(--dt-border);flex-shrink:0;background:#13131c}
-    #dt-props-body{flex:1;overflow-y:auto;padding:8px;min-height:0}
-    .dt-empty{color:var(--dt-text2);text-align:center;margin-top:20px;line-height:1.9;font-size:11px}.dt-empty span{font-size:10px;color:#3a3a50}
-    .dt-prop-section{margin-bottom:8px}.dt-prop-head{font-size:9px;color:var(--dt-text2);margin-bottom:4px;letter-spacing:.8px;font-weight:600}
-    .dt-prop-tag{display:inline-block;background:var(--dt-hover);border:1px solid var(--dt-border);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--dt-text)}
-    .dt-dim-badge{display:inline-block;margin-top:4px;font-size:11px;color:var(--dt-accent);background:rgba(77,158,255,.08);border:1px solid rgba(77,158,255,.2);border-radius:4px;padding:2px 8px}
-    .dt-dim-row{display:flex;gap:4px;font-size:11px;color:var(--dt-text2)}.dt-dim-row span{flex:1;background:var(--dt-bg);padding:3px 5px;border-radius:4px;text-align:center;border:1px solid var(--dt-border)}
-    .dt-xyz-row{display:flex;gap:3px}.dt-xyz-col{flex:1;display:flex;flex-direction:column;gap:2px}.dt-xyz-col>span{font-size:9px;font-weight:800;text-align:center;letter-spacing:.5px}
-    .dt-axis-x{color:var(--dt-x)}.dt-axis-y{color:var(--dt-y)}.dt-axis-z{color:var(--dt-z)}
-    .dt-xyz-input,.dt-label-input{width:100%;padding:4px 5px;background:var(--dt-bg);border:1px solid var(--dt-border);color:var(--dt-text);border-radius:5px;font-size:11px;outline:none;text-align:center;transition:border .15s}
-    .dt-label-input{text-align:left;padding:4px 8px}.dt-xyz-input:focus,.dt-label-input:focus{border-color:var(--dt-accent)}
-    #dt-align-panel{flex-shrink:0;padding:6px;border-top:1px solid var(--dt-border);display:none}
-    .dt-align-row{display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap}
-    #dt-hierarchy{flex-shrink:0;border-top:1px solid var(--dt-border);display:flex;flex-direction:column}
-    #dt-hierarchy-list{overflow-y:auto;max-height:130px;padding:3px 4px}
-    .dt-hier-empty{color:var(--dt-text2);text-align:center;font-size:11px;padding:8px}
-    .dt-hier-item{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:11px;color:var(--dt-text);transition:background .1s;white-space:nowrap;overflow:hidden}
-    .dt-hier-item:hover{background:var(--dt-hover)}.dt-hier-item.dt-hier-active{background:rgba(77,158,255,.12);color:var(--dt-accent)}.dt-hier-item.dt-hier-hidden{opacity:.35}
-    .dt-hier-icon{flex-shrink:0}.dt-hier-label{flex:1;overflow:hidden;text-overflow:ellipsis}
-    .dt-hier-actions{display:flex;gap:2px;opacity:0;flex-shrink:0}.dt-hier-item:hover .dt-hier-actions{opacity:1}
-    .dt-hier-vis,.dt-hier-del{background:none;border:none;cursor:pointer;font-size:11px;padding:0 3px;color:var(--dt-text2);border-radius:3px}
-    .dt-hier-del:hover{background:var(--dt-danger);color:#fff}
-    #dt-lib-body{overflow-y:auto;max-height:120px;padding:3px 4px;border-top:1px solid var(--dt-border);flex-shrink:0}
-    .dt-lib-group-label{font-size:9px;color:#3a3a50;text-transform:uppercase;letter-spacing:1px;padding:4px 6px 2px}
-    .dt-lib-item{padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px;color:var(--dt-text);display:flex;align-items:center;gap:6px;transition:all .1s}
-    .dt-lib-item:hover{background:var(--dt-hover);color:var(--dt-accent)}.dt-lib-item.active{background:rgba(77,158,255,.12);color:var(--dt-accent)}
-    #dt-file-ctrl{padding:6px;border-top:1px solid var(--dt-border);flex-shrink:0}
-    #dt-file-status{font-size:10px;color:var(--dt-success);min-height:13px;text-align:center;margin-bottom:4px}
-    .dt-btn{padding:4px 8px;border-radius:5px;border:1px solid var(--dt-border);background:var(--dt-hover);color:var(--dt-text);cursor:pointer;font-size:10px;transition:all .12s;text-align:center;white-space:nowrap}
-    .dt-btn:hover{background:var(--dt-active);color:#fff;border-color:var(--dt-accent)}.dt-btn-danger:hover{background:var(--dt-danger)!important;border-color:var(--dt-danger)!important}
-    .dt-btn-accent{border-color:var(--dt-accent2)!important;color:var(--dt-accent2)!important}.dt-btn-accent:hover{background:var(--dt-accent2)!important;color:#fff!important}
-    #dt-bottom{position:fixed;bottom:22px;left:58px;right:248px;background:var(--dt-bg);border:1px solid var(--dt-border);border-radius:10px 10px 0 0;z-index:9997;overflow:hidden;transition:height .25s cubic-bezier(.16,1,.3,1)}
-    #dt-bottom.dt-collapsed{height:28px}#dt-bottom.dt-expanded{height:180px}
-    #dt-bottom-hdr{height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;cursor:pointer;background:#13131c;border-bottom:1px solid var(--dt-border);user-select:none}
-    #dt-bottom-hdr>span{font-size:9px;color:var(--dt-text2);font-weight:700;text-transform:uppercase;letter-spacing:1px}.dt-code-btns{display:flex;gap:5px;align-items:center}
-    #dt-code-text{padding:6px 10px;font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:11px;color:#7ec8e3;white-space:pre-wrap;height:calc(100% - 28px);overflow-y:auto;line-height:1.4}
-    #dt-statusbar{position:fixed;bottom:0;left:0;right:0;height:22px;background:#0d2a4a;border-top:1px solid #1a3a6a;display:flex;align-items:center;padding:0 10px;gap:14px;z-index:9999;font-size:10px;color:#8ab4f8}
-    #dt-sb-tool{font-weight:800;color:var(--dt-accent)!important;font-size:10px}
-    #dt-wall-hud{position:fixed;top:38%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.88);color:#00d4ff;padding:6px 22px;border-radius:20px;font-size:20px;font-weight:800;pointer-events:none;z-index:9999;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6)}
-    #dt-draw-hint{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#aaa;font-size:11px;padding:4px 16px;border-radius:20px;z-index:9997;pointer-events:none;display:none;letter-spacing:.5px}
-    #dt-add-palette{position:fixed;bottom:48px;left:50%;transform:translateX(-50%);background:var(--dt-panel);border:1px solid var(--dt-border);border-radius:12px;padding:8px;gap:5px;z-index:9999;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6);max-width:80%;flex-wrap:wrap;justify-content:center}
-    .dt-palette-item{padding:5px 11px;border-radius:7px;cursor:pointer;font-size:11px;background:var(--dt-hover);color:var(--dt-text);border:1px solid transparent;transition:all .1s;white-space:nowrap}
-    .dt-palette-item:hover,.dt-palette-item.active{border-color:var(--dt-accent);color:#fff;background:rgba(77,158,255,.2)}
-    .dt-pal-sep{width:100%;height:0;border-top:1px solid var(--dt-border);margin:2px 0}
-    #dt-toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:#0c0c18;color:#e8e8f0;padding:6px 16px;border-radius:20px;font-size:11px;z-index:99999;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.6);border:1px solid #334}
-    #dt-toast.show{opacity:1}
+    @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+    :root {
+      --mc-bg:      #1a1a1a;
+      --mc-panel:   #2d2416;
+      --mc-slot:    #8b8b8b;
+      --mc-slotdk:  #373737;
+      --mc-slotlt:  #dbdbdb;
+      --mc-accent:  #ffff55;
+      --mc-green:   #55ff55;
+      --mc-red:     #ff5555;
+      --mc-blue:    #5588ff;
+      --mc-text:    #e0e0e0;
+      --mc-text2:   #aaaaaa;
+      --mc-border:  #555;
+      --mc-font:    'VT323', 'Courier New', monospace;
+    }
+
+    #mc-root * { box-sizing: border-box; margin: 0; }
+    #mc-root { font-family: var(--mc-font); color: var(--mc-text); }
+
+    /* ── HOTBAR ───────────────────────────────────── */
+    #mc-hotbar {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 3px; padding: 5px;
+      background: rgba(0,0,0,0.72);
+      border: 3px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: inset -2px -2px 0 #000, inset 2px 2px 0 rgba(255,255,255,0.15);
+      z-index: 9990; image-rendering: pixelated;
+    }
+    .mc-hb-slot {
+      width: 54px; height: 54px;
+      background: var(--mc-slot);
+      border: 3px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: inset -2px -2px 0 #333, inset 2px 2px 0 #ccc;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; position: relative; transition: background 0.05s;
+      user-select: none;
+    }
+    .mc-hb-slot:hover { background: #9e9e9e; }
+    .mc-hb-selected {
+      border-color: var(--mc-accent) !important;
+      box-shadow: 0 0 0 2px var(--mc-accent), inset -2px -2px 0 #333, inset 2px 2px 0 #ccc !important;
+      background: #a0a060 !important;
+    }
+    .mc-hb-key {
+      position: absolute; top: 2px; left: 4px; font-size: 11px; color: var(--mc-text2);
+      font-family: var(--mc-font); line-height: 1;
+    }
+    .mc-hb-icon { font-size: 22px; line-height: 1; }
+    .mc-hb-label { font-size: 9px; color: var(--mc-text2); margin-top: 1px; text-align: center; max-width: 50px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+    /* ── STATUS BAR ──────────────────────────────── */
+    #mc-statusbar {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 22px;
+      background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; gap: 16px; padding: 0 12px;
+      font-family: var(--mc-font); font-size: 14px; color: var(--mc-text2);
+      z-index: 9989; border-top: 1px solid #333;
+    }
+    #mc-sb-tool { color: var(--mc-accent); font-weight: bold; }
+    #mc-held { color: var(--mc-green); }
+
+    /* ── HUD (draw length) ───────────────────────── */
+    #mc-hud {
+      position: fixed; top: 36%; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.82); color: var(--mc-accent);
+      padding: 6px 24px; font-family: var(--mc-font); font-size: 22px;
+      border: 2px solid var(--mc-accent); border-radius: 2px;
+      pointer-events: none; display: none; z-index: 9999; letter-spacing: 1px;
+    }
+
+    /* ── PROPERTIES PANEL ────────────────────────── */
+    #mc-props {
+      position: fixed; right: 12px; top: 50%; transform: translateY(-50%);
+      width: 228px; background: rgba(18,14,8,0.95);
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: 4px 4px 0 rgba(0,0,0,0.6); z-index: 9985; display: none;
+      font-family: var(--mc-font);
+    }
+    .mc-props-head {
+      display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+      background: var(--mc-panel); border-bottom: 1px solid #3a3020;
+    }
+    .mc-props-icon { font-size: 18px; }
+    .mc-props-label {
+      flex: 1; background: #1a1208; border: 1px solid #554; color: var(--mc-text);
+      font-family: var(--mc-font); font-size: 14px; padding: 2px 6px; outline: none;
+    }
+    .mc-props-label:focus { border-color: var(--mc-accent); }
+    .mc-props-close {
+      background: none; border: none; color: var(--mc-text2); cursor: pointer;
+      font-size: 18px; line-height: 1; padding: 0 4px;
+    }
+    .mc-props-close:hover { color: var(--mc-red); }
+    .mc-props-type { padding: 3px 8px; font-size: 13px; color: var(--mc-text2); background: #1a1208; border-bottom: 1px solid #3a3020; }
+    .mc-prop-dim {
+      display: flex; gap: 4px; padding: 4px 8px; background: #111008; border-bottom: 1px solid #2a2010;
+    }
+    .mc-prop-dim span { flex: 1; text-align: center; font-size: 13px; color: var(--mc-text2); background: #1c1408; padding: 2px; }
+    .mc-xyz { padding: 5px 8px; border-bottom: 1px solid #2a2010; }
+    .mc-xyz-lbl { font-size: 11px; color: var(--mc-text2); margin-bottom: 3px; }
+    .mc-xyz-row { display: flex; gap: 3px; }
+    .mc-xyz-row label { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .mc-xyz-row label > span { font-size: 11px; font-family: var(--mc-font); font-weight: bold; }
+    .mc-ax-x { color: #ff6666; } .mc-ax-y { color: #66ff66; } .mc-ax-z { color: #6699ff; }
+    .mc-xyz-inp {
+      width: 100%; background: #1a1208; border: 1px solid #554; color: var(--mc-text);
+      font-family: var(--mc-font); font-size: 13px; padding: 2px 3px; text-align: center; outline: none;
+    }
+    .mc-xyz-inp:focus { border-color: var(--mc-accent); }
+    .mc-props-section-head { padding: 4px 8px; font-size: 11px; color: var(--mc-text2); background: #1a1208; border-bottom: 1px solid #2a2010; }
+    .mc-align-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 5px 8px; background: #111008; border-bottom: 1px solid #2a2010; }
+    .mc-align-row button { background: #3a2e18; border: 1px solid #665; color: var(--mc-text); font-family: var(--mc-font); font-size: 12px; padding: 2px 6px; cursor: pointer; }
+    .mc-align-row button:hover { background: #4a3e28; border-color: var(--mc-accent); }
+    .mc-action-row { display: flex; gap: 3px; padding: 6px 8px; }
+    .mc-action-row button { flex: 1; background: #3a2e18; border: 1px solid #665; color: var(--mc-text); font-family: var(--mc-font); font-size: 13px; padding: 4px 2px; cursor: pointer; }
+    .mc-action-row button:hover { background: #4a3e28; border-color: var(--mc-accent); }
+    .mc-action-row .mc-delete { color: var(--mc-red); } .mc-action-row .mc-delete:hover { background: #4a1010; border-color: var(--mc-red); }
+
+    /* ── INVENTORY ────────────────────────────────── */
+    #mc-inventory {
+      position: fixed; inset: 0; z-index: 9995;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.65);
+      font-family: var(--mc-font);
+      pointer-events: none; opacity: 0; transition: opacity 0.12s;
+    }
+    #mc-inventory.mc-inv-open { opacity: 1; pointer-events: all; }
+    #mc-inventory.mc-inv-closed { opacity: 0; pointer-events: none; }
+
+    #mc-inv-box {
+      width: 580px; max-width: 95vw;
+      background: var(--mc-bg);
+      border: 4px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: 8px 8px 0 rgba(0,0,0,0.8);
+      display: flex; flex-direction: column;
+      max-height: 80vh;
+    }
+
+    #mc-inv-title {
+      background: var(--mc-panel); padding: 10px 16px;
+      font-size: 22px; color: var(--mc-accent);
+      border-bottom: 3px solid var(--mc-slotdk);
+      display: flex; align-items: center; justify-content: space-between;
+      text-shadow: 2px 2px 0 #000;
+    }
+    #mc-inv-title button {
+      background: var(--mc-red); border: 2px solid; border-color: #ff9999 #880000 #880000 #ff9999;
+      color: white; font-family: var(--mc-font); font-size: 16px; padding: 2px 10px; cursor: pointer;
+    }
+
+    #mc-tabs {
+      display: flex; flex-wrap: wrap; gap: 2px; padding: 8px;
+      background: #111; border-bottom: 2px solid var(--mc-slotdk);
+    }
+    .mc-tab {
+      padding: 4px 14px; background: var(--mc-slot); cursor: pointer;
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      font-family: var(--mc-font); font-size: 15px; color: #111;
+      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd;
+    }
+    .mc-tab:hover { background: #9e9e9e; }
+    .mc-tab-active {
+      background: #c8c850; border-color: var(--mc-accent) !important;
+      box-shadow: 0 0 0 1px var(--mc-accent), inset -1px -1px 0 #666, inset 1px 1px 0 #ffe !important;
+    }
+
+    #mc-inv-grid {
+      flex: 1; overflow-y: auto; display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px; padding: 10px;
+      background: #0d0d0d;
+      scrollbar-width: thin; scrollbar-color: #444 #111;
+    }
+    .mc-inv-item {
+      background: var(--mc-slot); cursor: pointer;
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: inset -2px -2px 0 #333, inset 2px 2px 0 #ccc;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 8px 4px; gap: 4px; transition: background 0.08s; min-height: 70px;
+    }
+    .mc-inv-item:hover { background: #9e9e9e; box-shadow: 0 0 0 2px var(--mc-accent), inset -2px -2px 0 #333, inset 2px 2px 0 #ccc; }
+    .mc-inv-icon { font-size: 26px; line-height: 1; }
+    .mc-inv-name { font-size: 11px; color: #111; text-align: center; line-height: 1.2; }
+
+    #mc-inv-search {
+      padding: 6px 10px; border-top: 2px solid var(--mc-slotdk);
+      background: #111; display: flex; gap: 6px; align-items: center;
+    }
+    #mc-inv-search input {
+      flex: 1; background: #1a1a1a; border: 2px solid #555; color: var(--mc-text);
+      font-family: var(--mc-font); font-size: 15px; padding: 4px 10px; outline: none;
+    }
+    #mc-inv-search input:focus { border-color: var(--mc-accent); }
+    #mc-inv-search span { color: var(--mc-text2); font-size: 13px; white-space: nowrap; }
+
+    /* ── SCENE PANEL (hierarchy + code) ─────────── */
+    #mc-scene-panel {
+      position: fixed; left: 10px; top: 50%; transform: translateY(-50%);
+      width: 200px; background: rgba(18,14,8,0.95);
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      box-shadow: 4px 4px 0 rgba(0,0,0,0.6); z-index: 9980; max-height: 65vh; display: flex; flex-direction: column;
+      font-family: var(--mc-font);
+    }
+    #mc-scene-panel-hdr {
+      background: var(--mc-panel); padding: 6px 10px;
+      font-size: 15px; color: var(--mc-accent); border-bottom: 1px solid #3a3020;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #mc-scene-panel-hdr button {
+      background: none; border: 1px solid #554; color: var(--mc-text2); cursor: pointer;
+      font-family: var(--mc-font); font-size: 12px; padding: 1px 6px;
+    }
+    #mc-scene-panel-hdr button:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+    #mc-hier-list { flex: 1; overflow-y: auto; min-height: 0; }
+    .mc-hier-empty { padding: 12px; text-align: center; color: var(--mc-text2); font-size: 13px; }
+    .mc-hier-row {
+      display: flex; align-items: center; gap: 5px; padding: 3px 8px;
+      font-size: 13px; cursor: pointer; border-bottom: 1px solid #1a1408;
+      white-space: nowrap; overflow: hidden;
+    }
+    .mc-hier-row:hover { background: #2a2010; }
+    .mc-hier-sel { background: rgba(255,255,85,0.1); color: var(--mc-accent); }
+    .mc-hier-hid { opacity: 0.35; }
+    .mc-hier-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .mc-hier-acts { display: flex; gap: 2px; opacity: 0; }
+    .mc-hier-row:hover .mc-hier-acts { opacity: 1; }
+    .mc-hier-eye, .mc-hier-del {
+      background: none; border: none; cursor: pointer; font-size: 11px; padding: 0 3px; color: var(--mc-text2);
+    }
+    .mc-hier-del:hover { color: var(--mc-red); }
+
+    /* ── DRAW TOOLS STRIP ─────────────────────────── */
+    #mc-draw-strip {
+      position: fixed; left: 10px; bottom: 90px;
+      background: rgba(18,14,8,0.92);
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 9980;
+      font-family: var(--mc-font);
+    }
+    #mc-draw-strip-lbl { font-size: 11px; color: var(--mc-text2); text-align: center; padding-bottom: 3px; border-bottom: 1px solid #333; margin-bottom: 2px; }
+    .mc-draw-btn {
+      display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+      background: var(--mc-slot); cursor: pointer;
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      font-family: var(--mc-font); font-size: 14px; color: #111;
+      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd; min-width: 120px;
+      transition: background 0.08s;
+    }
+    .mc-draw-btn:hover { background: #9e9e9e; }
+    .mc-draw-btn.mc-active {
+      background: #c8c850; border-color: var(--mc-accent);
+      box-shadow: 0 0 0 1px var(--mc-accent), inset -1px -1px 0 #555, inset 1px 1px 0 #ffe;
+    }
+    .mc-draw-key { font-size: 11px; color: #555; margin-left: auto; }
+
+    /* ── FILE STRIP ───────────────────────────────── */
+    #mc-file-strip {
+      position: fixed; right: 12px; bottom: 90px;
+      background: rgba(18,14,8,0.92);
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 9980;
+      font-family: var(--mc-font);
+    }
+    #mc-file-strip button, #mc-link-btn {
+      background: var(--mc-slot); cursor: pointer;
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      font-family: var(--mc-font); font-size: 13px; color: #111; padding: 4px 10px;
+      box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #ddd; cursor: pointer;
+    }
+    #mc-file-strip button:hover, #mc-link-btn:hover { background: #9e9e9e; }
+    #mc-status-msg { font-size: 11px; color: var(--mc-green); text-align: center; min-height: 14px; }
+
+    /* ── CODE PANEL ───────────────────────────────── */
+    #mc-code-panel {
+      position: fixed; bottom: 90px; left: 220px; right: 240px;
+      background: rgba(8,8,4,0.92);
+      border: 2px solid; border-color: var(--mc-slotlt) var(--mc-slotdk) var(--mc-slotdk) var(--mc-slotlt);
+      z-index: 9978; overflow: hidden; display: none; flex-direction: column;
+      font-family: var(--mc-font);
+    }
+    #mc-code-panel.mc-code-open { display: flex; height: 160px; }
+    #mc-code-hdr { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; background: #1a1208; border-bottom: 1px solid #333; }
+    #mc-code-hdr span { font-size: 13px; color: var(--mc-accent); }
+    #mc-code-hdr button { background: #3a2e18; border: 1px solid #665; color: var(--mc-text2); font-family: var(--mc-font); font-size: 12px; padding: 2px 8px; cursor: pointer; }
+    #mc-code-hdr button:hover { border-color: var(--mc-accent); color: var(--mc-text); }
+    #mc-code-pre { flex: 1; overflow: auto; padding: 6px 10px; font-family: 'Courier New', monospace; font-size: 11px; color: #7ec8e3; white-space: pre; line-height: 1.5; }
+
+    /* ── TOAST ────────────────────────────────────── */
+    #mc-toast {
+      position: fixed; bottom: 95px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.88); color: var(--mc-text); padding: 6px 18px;
+      font-family: var(--mc-font); font-size: 16px; border: 1px solid #444;
+      z-index: 99999; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+      text-shadow: 1px 1px 0 #000;
+    }
+    #mc-toast.mc-toast-show { opacity: 1; }
+
+    /* ── CROSSHAIR (shown in edit mode) ──────────── */
+    #mc-crosshair {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      pointer-events: none; z-index: 9970; display: none;
+    }
+    #mc-crosshair::before, #mc-crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.7);
+    }
+    #mc-crosshair::before { width: 2px; height: 16px; left: -1px; top: -8px; }
+    #mc-crosshair::after  { width: 16px; height: 2px; left: -8px; top: -1px; }
   `;
   document.head.appendChild(style);
 
-  const root = document.createElement('div'); root.id = 'dt-root';
-
-  const TOOL_LIST = [
-    { id: 'select',    icon: '↖', tip: 'Select (V)' },
-    { id: 'translate', icon: '✥', tip: 'Move (G)' },
-    { id: 'rotate',    icon: '↻', tip: 'Rotate (R)' },
-    { id: 'scale',     icon: '⊞', tip: 'Scale (S)' },
-    null,
-    { id: 'wall',    icon: '█', tip: 'Draw Wall (W)' },
-    { id: 'road',    icon: '🛣', tip: 'Draw Road (D)' },
-    { id: 'divider', icon: '🟩', tip: 'Draw Divider (I)' },
-    { id: 'add',     icon: '＋', tip: 'Add Object (A)' },
-  ];
-
-  const toolbarHTML = TOOL_LIST.map(t => t === null ? `<div class="dt-tb-sep"></div>`
-    : `<button class="dt-tool-btn${t.id === STATE.tool ? ' active' : ''}" data-tool="${t.id}">${t.icon}<span class="dt-tt">${t.tip}</span></button>`
-  ).join('');
-
-  const groups = {};
-  for (const [k, def] of Object.entries(OBJ_DEFS)) (groups[def.group] = groups[def.group] || []).push({ k, def });
-  const libHTML = Object.entries(groups).map(([gn, items]) =>
-    `<div class="dt-lib-group-label">${gn}</div>${items.map(({ k, def }) =>
-      `<div class="dt-lib-item" data-libtype="${k}">${def.icon} ${def.label}</div>`
-    ).join('')}`
-  ).join('');
-  const palHTML = Object.entries(groups).map(([, items], gi, arr) =>
-    items.map(({ k, def }) => `<div class="dt-palette-item" data-paltype="${k}">${def.icon} ${def.label}</div>`).join('') +
-    (gi < arr.length - 1 ? `<div class="dt-pal-sep"></div>` : '')
-  ).join('');
+  // HTML ─────────────────────────────────────────────────────────────────────
+  const root = document.createElement('div'); root.id = 'mc-root';
 
   root.innerHTML = `
-    <div id="dt-toolbar">${toolbarHTML}</div>
-    <div id="dt-right">
-      <div class="dt-panel-hdr">⚙ Properties</div>
-      <div id="dt-props-body"><div class="dt-empty">Nothing selected<br><span>Click, or draw Road/Wall/Divider</span></div></div>
-      <div id="dt-align-panel" style="display:none">
-        <div class="dt-panel-hdr" style="background:transparent;border:none;padding:0 0 5px">⬡ Align &amp; Distribute</div>
-        <div class="dt-align-row">
-          <button class="dt-btn" onclick="window._dt.align.minX()">←X</button>
-          <button class="dt-btn" onclick="window._dt.align.centerX()">·X</button>
-          <button class="dt-btn" onclick="window._dt.align.maxX()">X→</button>
-          <button class="dt-btn" onclick="window._dt.align.groundY()">⬇Y0</button>
-        </div>
-        <div class="dt-align-row">
-          <button class="dt-btn" onclick="window._dt.align.minZ()">←Z</button>
-          <button class="dt-btn" onclick="window._dt.align.centerZ()">·Z</button>
-          <button class="dt-btn" onclick="window._dt.align.maxZ()">Z→</button>
-        </div>
-        <div class="dt-align-row">
-          <button class="dt-btn dt-btn-accent" onclick="window._dt.align.distributeX()">↔ Dist X</button>
-          <button class="dt-btn dt-btn-accent" onclick="window._dt.align.distributeZ()">↔ Dist Z</button>
-        </div>
-      </div>
-      <div id="dt-hierarchy">
-        <div class="dt-panel-hdr">🗂 Hierarchy <span style="float:right;opacity:.35;font-size:8px;font-weight:400">Ctrl+click multi</span></div>
-        <div id="dt-hierarchy-list"><div class="dt-hier-empty">Scene is empty</div></div>
-      </div>
-      <div class="dt-panel-hdr" id="dt-lib-toggle" style="cursor:pointer">📦 Object Library ▾</div>
-      <div id="dt-lib-body">${libHTML}</div>
-      <div id="dt-file-ctrl">
-        <div id="dt-file-status"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
-          <button class="dt-btn" id="dt-link-btn">📎 Link .js</button>
-          <button class="dt-btn" id="dt-save-file-btn">💾 Save</button>
-        </div>
-        <button class="dt-btn" id="dt-copy-btn" style="width:100%">📋 Copy Code</button>
-      </div>
+    <!-- Hotbar -->
+    <div id="mc-hotbar"></div>
+
+    <!-- Status bar -->
+    <div id="mc-statusbar">
+      <span id="mc-sb-tool">SELECT ↖</span>
+      <span id="mc-sb-cursor" style="color:#666">0, 0</span>
+      <span id="mc-held"></span>
+      <span id="mc-sb-objs" style="color:#666">0 objects</span>
+      <span id="mc-sb-snap" style="color:#666">Snap: 0.5</span>
+      <span id="mc-sb-space" style="color:#666">🌐 World</span>
+      <span style="margin-left:auto;color:#444;font-size:12px">E=Inventory  1-9=Slots  Tab=Snap  F=Focus  Ctrl+Z/Y</span>
     </div>
 
-    <div id="dt-bottom" class="dt-collapsed">
-      <div id="dt-bottom-hdr">
+    <!-- Draw length HUD -->
+    <div id="mc-hud"></div>
+
+    <!-- Scene / Hierarchy panel -->
+    <div id="mc-scene-panel">
+      <div id="mc-scene-panel-hdr">
+        🗂 Scene
+        <div style="display:flex;gap:4px">
+          <button onclick="document.getElementById('mc-code-panel').classList.toggle('mc-code-open')">{}</button>
+          <button onclick="window._dt.undo()">↩</button>
+          <button onclick="window._dt.redo()">↪</button>
+        </div>
+      </div>
+      <div id="mc-hier-list"><div class="mc-hier-empty">No objects in scene</div></div>
+    </div>
+
+    <!-- Draw tools strip -->
+    <div id="mc-draw-strip">
+      <div id="mc-draw-strip-lbl">DRAW TOOLS</div>
+      <button class="mc-draw-btn" data-tool="wall">█ Wall<span class="mc-draw-key">W</span></button>
+      <button class="mc-draw-btn" data-tool="road">🛣 Road<span class="mc-draw-key">D</span></button>
+      <button class="mc-draw-btn" data-tool="divider">🟩 Divider<span class="mc-draw-key">I</span></button>
+    </div>
+
+    <!-- File strip -->
+    <div id="mc-file-strip">
+      <div id="mc-status-msg"></div>
+      <button id="mc-link-btn">📎 Link .js</button>
+      <button id="mc-save-btn">💾 Save File</button>
+      <button id="mc-copy-btn">📋 Copy Code</button>
+    </div>
+
+    <!-- Properties panel -->
+    <div id="mc-props"></div>
+
+    <!-- Code panel -->
+    <div id="mc-code-panel">
+      <div id="mc-code-hdr">
         <span>{ } Generated Code</span>
-        <div class="dt-code-btns">
-          <button class="dt-btn" style="padding:2px 8px;font-size:9px" onclick="navigator.clipboard.writeText(window._dt.getCode())">📋 Copy</button>
-          <span id="dt-bottom-toggle" style="font-size:10px;color:#555">▲</span>
+        <div style="display:flex;gap:4px">
+          <button onclick="navigator.clipboard.writeText(window._dt.getCode());window._dt.toast&&window._dt.toast('📋 Copied')">📋 Copy</button>
+          <button onclick="document.getElementById('mc-code-panel').classList.remove('mc-code-open')">×</button>
         </div>
       </div>
-      <pre id="dt-code-text">// Place or draw objects to generate code</pre>
+      <pre id="mc-code-pre">// Draw or place objects to generate code</pre>
     </div>
 
-    <div id="dt-statusbar">
-      <span id="dt-sb-tool">SELECT ↖</span>
-      <span id="dt-sb-cursor" style="color:#555">X:0  Z:0</span>
-      <span id="dt-sb-objects" style="color:#555">Objects: 0</span>
-      <span id="dt-sb-snap" style="color:#555">Snap:0.5</span>
-      <span id="dt-sb-space" style="color:#555">🌐 World</span>
-      <span style="margin-left:auto;opacity:.35;font-size:9px">V G R S · W=Wall D=Road I=Divider A=Add · Tab:Snap L:Space G:Grid F:Focus Ctrl+Z/Y Ctrl+D Del</span>
+    <!-- Inventory -->
+    <div id="mc-inventory" class="mc-inv-closed">
+      <div id="mc-inv-box">
+        <div id="mc-inv-title">
+          🎒 Creative Inventory
+          <button onclick="closeInventory ? closeInventory() : void(0)">✕ Close [E]</button>
+        </div>
+        <div id="mc-tabs">${tabsHTML}</div>
+        <div id="mc-inv-grid"></div>
+        <div id="mc-inv-search">
+          <input id="mc-inv-search-inp" type="text" placeholder="Search objects...">
+          <span>ESC or E to close</span>
+        </div>
+      </div>
     </div>
 
-    <div id="dt-wall-hud">📏 0.00 u</div>
-    <div id="dt-draw-hint">Dbl-click to start · Dbl-click again to finish · Shift = straight · Esc = cancel</div>
-    <div id="dt-add-palette">${palHTML}</div>
-    <div id="dt-toast"></div>
+    <!-- Crosshair -->
+    <div id="mc-crosshair"></div>
+
+    <!-- Toast -->
+    <div id="mc-toast"></div>
   `;
+
   document.body.appendChild(root);
 
-  root.querySelectorAll('.dt-tool-btn[data-tool]').forEach(btn =>
-    btn.addEventListener('click', () => setTool(btn.dataset.tool))
-  );
-
-  const hint = document.getElementById('dt-draw-hint');
-  setInterval(() => { if (hint) hint.style.display = DRAW_TOOLS.includes(STATE.tool) ? 'block' : 'none'; }, 200);
-
-  const lb = document.getElementById('dt-lib-body');
-  document.getElementById('dt-lib-toggle').addEventListener('click', () => {
-    const open = lb.style.display !== 'none';
-    lb.style.display = open ? 'none' : 'block';
-    document.getElementById('dt-lib-toggle').textContent = `📦 Object Library ${open ? '▸' : '▾'}`;
-  });
-
-  root.querySelectorAll('.dt-lib-item').forEach(el => {
-    el.addEventListener('click', () => {
-      STATE.pendingType = el.dataset.libtype;
-      root.querySelectorAll('.dt-lib-item').forEach(x => x.classList.remove('active'));
-      el.classList.add('active');
-      setTool('add');
-      toast(`Click ground to place ${OBJ_DEFS[el.dataset.libtype]?.label}`);
+  // ── Bind draw tool buttons ─────────────────────────────────────────────────
+  root.querySelectorAll('.mc-draw-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tool = btn.dataset.tool;
+      setTool(tool);
+      // Sync hotbar highlight too
+      const slotIdx = HOTBAR_SLOTS.findIndex(s => s.id === tool);
+      if (slotIdx >= 0) setSlot(slotIdx);
     });
   });
 
-  root.querySelectorAll('.dt-palette-item').forEach(el => {
-    el.addEventListener('click', () => {
-      STATE.pendingType = el.dataset.paltype;
-      root.querySelectorAll('.dt-palette-item').forEach(x => x.classList.remove('active'));
-      el.classList.add('active');
-      toast(`Click ground to place ${OBJ_DEFS[el.dataset.paltype]?.label}`);
+  // ── Inventory tabs ─────────────────────────────────────────────────────────
+  root.querySelectorAll('.mc-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      STATE.invTab = tab.dataset.group;
+      _updateTabs(); _renderInvGrid();
     });
   });
 
-  document.getElementById('dt-bottom-hdr').addEventListener('click', e => {
-    if (e.target.tagName === 'BUTTON') return;
-    const p = document.getElementById('dt-bottom'), cl = p.classList.contains('dt-collapsed');
-    p.classList.toggle('dt-collapsed', !cl); p.classList.toggle('dt-expanded', cl);
-    document.getElementById('dt-bottom-toggle').textContent = cl ? '▼' : '▲';
+  // ── Inventory search ───────────────────────────────────────────────────────
+  document.getElementById('mc-inv-search-inp')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    const grid = document.getElementById('mc-inv-grid'); if (!grid) return;
+    if (!q) { _renderInvGrid(); return; }
+    const items = Object.entries(OBJ_DEFS).filter(([k, def]) =>
+      def.label.toLowerCase().includes(q) || def.group.toLowerCase().includes(q) || k.includes(q)
+    );
+    grid.innerHTML = items.map(([key, def]) => `
+      <div class="mc-inv-item" data-key="${key}" title="${def.label}">
+        <div class="mc-inv-icon">${def.icon||'⬛'}</div>
+        <div class="mc-inv-name">${def.label}</div>
+      </div>
+    `).join('');
+    grid.querySelectorAll('.mc-inv-item').forEach(el => {
+      el.addEventListener('click', () => {
+        STATE.pendingType = el.dataset.key;
+        HOTBAR_SLOTS[7] = { id: el.dataset.key, icon: OBJ_DEFS[el.dataset.key]?.icon||'⬛', label: OBJ_DEFS[el.dataset.key]?.label||el.dataset.key, color:'#fff', type:'place' };
+        _rebuildHotbar(); setSlot(7); setTool('add'); closeInventory();
+        toast(`🖐 Holding: ${OBJ_DEFS[el.dataset.key]?.label}`);
+      });
+    });
   });
 
-  document.getElementById('dt-link-btn').addEventListener('click', _linkFile);
-  document.getElementById('dt-save-file-btn').addEventListener('click', _saveToFile);
-  document.getElementById('dt-copy-btn').addEventListener('click', () => {
+  // ── Inventory close button ─────────────────────────────────────────────────
+  document.getElementById('mc-inv-title')?.querySelector('button')?.addEventListener('click', closeInventory);
+
+  // ── Click outside inventory box to close ──────────────────────────────────
+  document.getElementById('mc-inventory')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('mc-inventory')) closeInventory();
+  });
+
+  // ── File controls ──────────────────────────────────────────────────────────
+  document.getElementById('mc-link-btn')?.addEventListener('click', _linkFile);
+  document.getElementById('mc-save-btn')?.addEventListener('click', _saveToFile);
+  document.getElementById('mc-copy-btn')?.addEventListener('click', () => {
     navigator.clipboard.writeText(_generateCode()); toast('📋 Copied!');
   });
+
+  // ── Build hotbar ───────────────────────────────────────────────────────────
+  _rebuildHotbar();
+
+  // ── Render initial inventory grid ──────────────────────────────────────────
+  _renderInvGrid();
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §20  ANIMATE HOOK
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §23  ANIMATE HOOK
+// ══════════════════════════════════════════════════════════════════════════════
 
 export function updateDevTool() {
-  const dtRoot = document.getElementById('dt-root');
-  if (dtRoot) dtRoot.style.display = appMode === 'PLAY' ? 'none' : 'block'; // <-- NEW DISPLAY CHECK
+  const root = document.getElementById('mc-root');
+  const inPlayer = isPlayerActive();
 
-  if (appMode === 'PLAY' && TC.dragging === false) { // <-- NEW TC CHECK
-     TC.visible = false;
-     return;
-  } else if (appMode === 'EDIT' && STATE.selected.length > 0) {
-     TC.visible = true;
-  }
+  // Hide devtool UI in player mode
+  if (root) root.style.display = inPlayer ? 'none' : 'block';
+  TC.visible = !inPlayer && STATE.selected.length > 0;
+
+  if (inPlayer) return;
 
   if (STATE.selected.length === 1 && TC.dragging) {
     _selBox.setFromObject(STATE.selected[0]);
     _renderProps();
   }
+
+  // Sync draw tool buttons
+  document.querySelectorAll('.mc-draw-btn').forEach(btn => {
+    btn.classList.toggle('mc-active', btn.dataset.tool === STATE.tool);
+  });
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// §21  INIT
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// §24  INIT
+// ══════════════════════════════════════════════════════════════════════════════
 
 export function initDevTool() {
   _buildUI();
+
   const cv = renderer.domElement;
   cv.addEventListener('mousemove', _onMove);
   cv.addEventListener('click',     _onClick);
   cv.addEventListener('dblclick',  _onDblClick);
   window.addEventListener('keydown', _onKey);
+
   _grid.visible = STATE.showGrid;
 
+  // Expose toast for code panel button
+  window._dt.toast = toast;
+
   console.log(
-    '%c🛠️ DevTool v3.3\n' +
-    'FIXED: Wall drawing now lands exactly where you click\n' +
-    'FIXED: Camera no longer moves when dragging TC gizmo\n' +
-    '─────────────────────────────────────────\n' +
-    'V:Select  G:Move  R:Rotate  S:Scale\n' +
-    'W:Wall   D:Road   I:Divider   A:Add\n' +
-    'Tab:Snap · L:Space · G:Grid · F:Focus\n' +
-    'Ctrl+Z/Y · Ctrl+D · Del · X/Y/Z axis lock\n' +
-    '─────────────────────────────────────────\n' +
-    '⚠️ interaction.js — add to every orbit handler:\n' +
-    '   if (!window._dtCanOrbit()) return;',
-    'color:#4d9eff;font-size:13px;font-weight:bold;'
+    '%c🎮 DevTool v4  —  Minecraft Creative Mode\n' +
+    'E=Inventory  1-9=Hotbar  W=Wall  D=Road  I=Divider\n' +
+    'Ctrl+Z=Undo  Ctrl+Y=Redo  F=Focus  Tab=Snap  Del=Delete\n\n' +
+    '⚠️ CAMERA FIX — interaction.js orbit handlers mein add karo:\n' +
+    '   import { isPlayerActive } from \'./player.js\';\n' +
+    '   if (isPlayerActive() || !window._dtCanOrbit()) return;',
+    'color:#ffff55;background:#1a1a1a;font-size:13px;font-weight:bold;padding:4px 8px;'
   );
-  toast('🛠️ DevTool v3.3 — Wall + Camera fixes applied');
+
+  toast('🎮 DevTool v4  ·  E = Open Inventory');
 }

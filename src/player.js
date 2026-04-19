@@ -14,6 +14,8 @@
 import * as THREE from 'three';
 import { scene, camera } from './scene.js';
 
+
+
 // ── Constants ─────────────────────────────────────────────────────────────
 const WALK_SPEED    = 0.20;
 const RUN_SPEED     = 0.50;
@@ -96,6 +98,8 @@ export function enterPlayerMode() {
     canvas.webkitRequestPointerLock;
   canvas.requestPointerLock();
 }
+
+
 
 export function exitPlayerMode() {
   _active = false;
@@ -400,6 +404,7 @@ function _bindKeys() {
       case 'ShiftLeft': case 'ShiftRight': _keys.shift = false; break;
     }
   });
+  
 
   // ── Mouse look (pointer lock) ─────────────────────────────────────
   document.addEventListener('mousemove', (e) => {

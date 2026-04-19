@@ -96,6 +96,10 @@ document.addEventListener('pointerlockchange', () => {
   overlay.style.display = isPlayerActive() && !locked ? 'block' : 'none';
 });
 
+document.getElementById('exit-btn')?.addEventListener('click', () => {
+  exitPlayerMode();
+});
+
 // Mobile sprint button
 const sprintBtn = document.getElementById('mobile-sprint');
 sprintBtn?.addEventListener(

@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { orbit, updateCam } from './scene.js';
+export let appMode = 'EDIT';
+
+export function setAppMode(mode) {
+  appMode = mode;
+}
 
 const keys = {};
 let isDragging = false, prevX = 0, prevY = 0;
@@ -7,6 +12,7 @@ let dragDist = 0;
 let lastT = null, pinchDist0 = 0;
 
 window.addEventListener('mousedown', (e) => {
+  if (isPlayerActive()) return;
   isDragging = true;
   prevX = e.clientX;
   prevY = e.clientY;
