@@ -146,7 +146,7 @@ function _blocker(on) {
 window.addEventListener('pointerup', () => {
   if (!TC.dragging) {
     STATE.isDraggingTC = false;
-    if (controls) controls.enabled = true;
+    if (controls && !isPlayerActive()) controls.enabled = true;
     _blocker(false);
   }
 });
@@ -458,11 +458,11 @@ function setTool(tool) {
   // Update toolbar buttons
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('mc-active', b.dataset.tool === tool));
 
-  if      (tool === 'translate') { TC.setMode('translate'); if (STATE.selected.length) TC.attach(STATE.selected[0]); }
-  else if (tool === 'rotate')    { TC.setMode('rotate');    if (STATE.selected.length) TC.attach(STATE.selected[0]); }
-  else if (tool === 'scale')     { TC.setMode('scale');     if (STATE.selected.length) TC.attach(STATE.selected[0]); }
-  else if (tool === 'select')    { TC.setMode('translate'); if (!STATE.selected.length) TC.detach(); }
-  else                           { TC.detach(); }
+  TC.detach();
+  if      (tool === 'translate') { TC.setMode('translate'); if (STATE.selected.length === 1) TC.attach(STATE.selected[0]); }
+  else if (tool === 'rotate')    { TC.setMode('rotate');    if (STATE.selected.length === 1) TC.attach(STATE.selected[0]); }
+  else if (tool === 'scale')     { TC.setMode('scale');     if (STATE.selected.length === 1) TC.attach(STATE.selected[0]); }
+  else if (tool === 'select')    { TC.setMode('translate'); if (STATE.selected.length === 1) TC.attach(STATE.selected[0]); }
 
   if (!DRAW_TOOLS.includes(tool) && STATE.drawStart) _drawClear();
   if (!DRAW_TOOLS.includes(tool)) _setHUD('');
@@ -1329,9 +1329,13 @@ export function updateDevTool() {
 
   // Hide devtool UI in player mode
   if (root) root.style.display = inPlayer ? 'none' : 'block';
-  TC.visible = !inPlayer && STATE.selected.length > 0;
 
-  if (inPlayer) return;
+  if (inPlayer) {
+    TC.detach();
+    return;
+  }
+
+  TC.visible = STATE.selected.length > 0;
 
   if (STATE.selected.length === 1 && TC.dragging) {
     _selBox.setFromObject(STATE.selected[0]);
