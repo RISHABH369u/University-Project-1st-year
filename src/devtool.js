@@ -469,6 +469,7 @@ function setTool(tool) {
   _updateSB();
 }
 
+
 // ══════════════════════════════════════════════════════════════════════════════
 // §14  INVENTORY
 // ══════════════════════════════════════════════════════════════════════════════
@@ -885,7 +886,7 @@ function _buildUI() {
 
     /* ── HOTBAR ───────────────────────────────────── */
     #mc-hotbar {
-      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);
       display: flex; align-items: center; gap: 2px; padding: 5px;
       background: var(--dt-surface);
       border: 1px solid var(--dt-border);
@@ -893,6 +894,10 @@ function _buildUI() {
       box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
       z-index: 9990;
     }
+
+
+
+
     .mc-hb-slot {
       width: 50px; height: 50px;
       background: transparent;
