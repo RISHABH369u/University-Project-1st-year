@@ -17,22 +17,22 @@ import { initDevTool, updateDevTool } from './devtool.js';  // ← DevTool
 
 // ─── World ───────────────────────────────────────────────────────────────────
 createGround();
-createRoads();
-createParking();
-createBoundary();
+// createRoads();
+// createParking();
+// createBoundary();
 
 // Lawns & open areas
-mkPlane(0,   3,  9,  8, 0x4caf50, 0.01);
-mkPlane(-10, 18, 10, 14, 0x4caf50, 0.01);
-mkPlane(-26,  5, 16,  8, 0x4caf50, 0.01);
-mkPlane(10,  50, 16, 14, 0x4caf50, 0.01);
-mkPlane(-20, 62, 10, 12, 0x4caf50, 0.01);
-mkPlane(4,   76, 28,  8, 0x4caf50, 0.01);
-mkPlane(40,  62, 22, 24, 0x45a049, 0.01);
-mkPlane(40,  62,  3, 14, 0xc2b260, 0.02);
+// mkPlane(0,   3,  9,  8, 0x4caf50, 0.01);
+// mkPlane(-10, 18, 10, 14, 0x4caf50, 0.01);
+// mkPlane(-26,  5, 16,  8, 0x4caf50, 0.01);
+// mkPlane(10,  50, 16, 14, 0x4caf50, 0.01);
+// mkPlane(-20, 62, 10, 12, 0x4caf50, 0.01);
+// mkPlane(4,   76, 28,  8, 0x4caf50, 0.01);
+// mkPlane(40,  62, 22, 24, 0x45a049, 0.01);
+// mkPlane(40,  62,  3, 14, 0xc2b260, 0.02);
 
-createBuildings();
-createGate();
+// createBuildings();
+// createGate();
 
 
 
