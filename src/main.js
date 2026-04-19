@@ -51,12 +51,10 @@ const exitBtn = document.getElementById('exit-btn');
 
 playerBtn?.addEventListener('click', () => {
   enterPlayerMode();
-  if (controls) controls.enabled = false;
 });
 
 exitBtn?.addEventListener('click', () => {
   exitPlayerMode();
-  if (controls) controls.enabled = true;
 });
 
 // Speed badge update
@@ -94,10 +92,6 @@ document.addEventListener('pointerlockchange', () => {
   );
 
   overlay.style.display = isPlayerActive() && !locked ? 'block' : 'none';
-});
-
-document.getElementById('exit-btn')?.addEventListener('click', () => {
-  exitPlayerMode();
 });
 
 // Mobile sprint button

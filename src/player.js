@@ -7,7 +7,7 @@
  */
 
 import * as THREE from 'three';
-import { scene, camera } from './scene.js';
+import { scene, camera, controls } from './scene.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // TUNABLES
@@ -64,6 +64,7 @@ export function isPlayerActive() { return _active; }
 
 export function enterPlayerMode() {
   _active = true;
+  if (controls) controls.enabled = false;
   _root.visible = true;
   _pos.set(0, 0, 22);
   _yaw = Math.PI; _pitch = 0.18; _velY = 0; _walkT = 0;
@@ -79,6 +80,7 @@ export function enterPlayerMode() {
 
 export function exitPlayerMode() {
   _active = false;
+  if (controls) controls.enabled = true;
   _root.visible = false;
   _toggleHud(false);
   document.exitPointerLock?.();
