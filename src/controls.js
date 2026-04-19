@@ -1,103 +1,208 @@
-import * as THREE from 'three';
-import { orbit, updateCam } from './scene.js';
-export let appMode = 'EDIT';
+/**
+ * controls.js  —  Blender / Unreal Engine style viewport camera
+ * ─────────────────────────────────────────────────────────────
+ *  Right-click drag       →  Orbit  (Unreal style)
+ *  Middle-click drag      →  Orbit  (Blender style)
+ *  Shift + Middle drag    →  Pan    (Blender style)
+ *  Shift + Right drag     →  Pan
+ *  Scroll wheel           →  Zoom in / out
+ *  F key (via devtool)    →  Focus on selection  (controls.target + controls.update)
+ *
+ *  All orbit/pan/zoom is suppressed automatically when:
+ *    • Player mode is active            (isPlayerActive())
+ *    • A TC gizmo is being dragged      (!window._dtCanOrbit())
+ *    • The cursor is over a UI panel    (event path check)
+ *
+ *  Smoothing: every value eases toward its target each frame (damping).
+ *  Feel: identical to Blender's Middle-mouse orbit.
+ */
 
-export function setAppMode(mode) {
-  appMode = mode;
+import { orbit, updateCam, camera, controls } from './scene.js';
+import { isPlayerActive } from './player.js';
+
+// ─── Tuning ──────────────────────────────────────────────────────────────────
+const ORBIT_SPEED  = 0.006;   // rad / px
+const PAN_SPEED    = 0.06;    // world-units / px  (scales with zoom)
+const ZOOM_SPEED   = 0.08;    // fraction of r per scroll tick
+const DAMP         = 0.12;    // 0 = instant, 1 = never arrives (0.10–0.15 feels Blender-ish)
+const MIN_PHI      = 0.08;    // don't flip over the pole
+const MAX_PHI      = Math.PI * 0.49;
+const MIN_R        = 8;
+const MAX_R        = 380;
+
+// ─── Internal state ──────────────────────────────────────────────────────────
+
+// "Target" values (what we want to reach)
+const T = {
+  theta: orbit.theta,
+  phi:   orbit.phi,
+  r:     orbit.r,
+  tx:    orbit.tx,
+  tz:    orbit.tz,
+};
+
+// "Current" values (smoothed — written to orbit each frame)
+const C = { ...T };
+
+// Mouse tracking
+let _dragging   = false;
+let _panMode    = false;
+let _lastX      = 0;
+let _lastY      = 0;
+let _button     = -1;   // which button started the drag
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function _canAct() {
+  if (isPlayerActive()) return false;
+  if (typeof window._dtCanOrbit === 'function' && !window._dtCanOrbit()) return false;
+  return true;
 }
 
-const keys = {};
-let isDragging = false, prevX = 0, prevY = 0;
-let dragDist = 0;
-let lastT = null, pinchDist0 = 0;
+function _isOverUI(e) {
+  // Allow events that originate directly on the canvas
+  return e.target !== document.querySelector('canvas#c') &&
+         e.target.tagName !== 'CANVAS';
+}
 
-window.addEventListener('mousedown', (e) => {
-  if (isPlayerActive()) return;
-  isDragging = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
-  dragDist = 0;
-});
+// ─── Pointer events ──────────────────────────────────────────────────────────
 
-window.addEventListener('mouseup', () => {
-  isDragging = false;
-});
+function _onPointerDown(e) {
+  if (!_canAct()) return;
+  if (_isOverUI(e)) return;
 
-window.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  const dx = e.clientX - prevX;
-  const dy = e.clientY - prevY;
-  dragDist += Math.abs(dx) + Math.abs(dy);
-  orbit.theta -= dx * 0.0036;
-  orbit.phi = Math.max(0.08, Math.min(1.5, orbit.phi + dy * 0.0036));
-  prevX = e.clientX;
-  prevY = e.clientY;
-  updateCam();
-});
+  // Right-click (button 2) OR Middle-click (button 1)
+  if (e.button !== 1 && e.button !== 2) return;
 
-window.addEventListener('wheel', (e) => {
-  orbit.r = Math.max(15, Math.min(240, orbit.r + e.deltaY * 0.075));
-  updateCam();
   e.preventDefault();
-}, { passive: false });
+  _dragging = true;
+  _button   = e.button;
+  _lastX    = e.clientX;
+  _lastY    = e.clientY;
 
-window.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 1) {
-    lastT = e.touches[0];
-    dragDist = 0;
-  }
-  if (e.touches.length === 2) {
-    pinchDist0 = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
-  }
-}, { passive: true });
+  // Pan mode: Middle + Shift  OR  Right + Shift
+  _panMode = e.shiftKey;
 
-window.addEventListener('touchmove', (e) => {
+  window.addEventListener('pointermove', _onPointerMove);
+  window.addEventListener('pointerup',   _onPointerUp);
+}
+
+function _onPointerMove(e) {
+  if (!_dragging) return;
+  if (!_canAct()) { _stopDrag(); return; }
+
+  const dx = e.clientX - _lastX;
+  const dy = e.clientY - _lastY;
+  _lastX = e.clientX;
+  _lastY = e.clientY;
+
+  // Re-check shift mid-drag to allow switching between orbit/pan
+  _panMode = e.shiftKey;
+
+  if (_panMode) {
+    // ── PAN ──
+    // Move the look-at target in the plane perpendicular to the view direction.
+    // We derive right & forward vectors from the current theta.
+    const scale = (T.r / 80) * PAN_SPEED;  // pan scales with zoom distance
+
+    // Right vector in world XZ: perpendicular to theta
+    const rightX = Math.cos(T.theta);
+    const rightZ = -Math.sin(T.theta);
+
+    // Forward vector projected on ground (no Y tilt)
+    const fwdX = -Math.sin(T.theta);
+    const fwdZ = -Math.cos(T.theta);
+
+    T.tx -= (dx * rightX - dy * fwdX) * scale;
+    T.tz -= (dx * rightZ - dy * fwdZ) * scale;
+  } else {
+    // ── ORBIT ──
+    T.theta -= dx * ORBIT_SPEED;
+    T.phi    = Math.max(MIN_PHI, Math.min(MAX_PHI, T.phi + dy * ORBIT_SPEED));
+  }
+}
+
+function _onPointerUp(e) {
+  if (e.button === _button) _stopDrag();
+}
+
+function _stopDrag() {
+  _dragging = false;
+  _button   = -1;
+  window.removeEventListener('pointermove', _onPointerMove);
+  window.removeEventListener('pointerup',   _onPointerUp);
+}
+
+// ─── Scroll / Zoom ───────────────────────────────────────────────────────────
+
+function _onWheel(e) {
+  if (!_canAct()) return;
+  if (_isOverUI(e)) return;
   e.preventDefault();
-  if (e.touches.length === 1 && lastT) {
-    const t = e.touches[0];
-    const dx = t.clientX - lastT.clientX;
-    const dy = t.clientY - lastT.clientY;
-    dragDist += Math.abs(dx) + Math.abs(dy);
-    orbit.theta -= dx * 0.004;
-    orbit.phi = Math.max(0.08, Math.min(1.5, orbit.phi + dy * 0.004));
-    lastT = t;
-    updateCam();
-  } else if (e.touches.length === 2) {
-    const d = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
-    orbit.r = Math.max(15, Math.min(240, orbit.r - (d - pinchDist0) * 0.28));
-    pinchDist0 = d;
-    updateCam();
-  }
-}, { passive: false });
 
-window.addEventListener('touchend', () => { lastT = null; });
+  // Zoom toward / away — scale factor feels natural like Blender
+  const delta = e.deltaY > 0 ? 1 : -1;
+  T.r = Math.max(MIN_R, Math.min(MAX_R, T.r * (1 + delta * ZOOM_SPEED)));
+}
 
-window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
-window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+// ─── Context menu suppression (right-click menu) ─────────────────────────────
+
+function _onContextMenu(e) {
+  if (!isPlayerActive()) e.preventDefault();
+}
+
+// ─── Frame update (call from animate loop) ───────────────────────────────────
 
 export function handleControls() {
-  const speed = 0.5;
-  const dir = new THREE.Vector3();
+  if (isPlayerActive()) return;
 
-  if (keys['a']) dir.x -= 1;
-  if (keys['d']) dir.x += 1;
-  if (keys['w']) dir.z -= 1;
-  if (keys['s']) dir.z += 1;
-
-  if (dir.length() > 0) {
-    dir.normalize().multiplyScalar(speed);
-    dir.applyEuler(new THREE.Euler(0, orbit.theta, 0));
-    orbit.tx += dir.x;
-    orbit.tz += dir.z;
-    updateCam();
+  // Sync target from controls.target (devtool F-key sets this)
+  if (controls.target) {
+    T.tx = controls.target.x;
+    T.tz = controls.target.z;
   }
 
-  if (keys['q']) { orbit.r = Math.max(15, orbit.r - speed * 1.5); updateCam(); }
-  if (keys['e']) { orbit.r = Math.min(240, orbit.r + speed * 1.5); updateCam(); }
+  // Smooth damp toward targets
+  C.theta = C.theta + (T.theta - C.theta) * DAMP * 6;
+  C.phi   = C.phi   + (T.phi   - C.phi)   * DAMP * 6;
+  C.r     = C.r     + (T.r     - C.r)     * DAMP * 6;
+  C.tx    = C.tx    + (T.tx    - C.tx)    * DAMP * 6;
+  C.tz    = C.tz    + (T.tz    - C.tz)    * DAMP * 6;
+
+  // Write smoothed values to orbit object → updateCam reads them
+  orbit.theta = C.theta;
+  orbit.phi   = C.phi;
+  orbit.r     = C.r;
+  orbit.tx    = C.tx;
+  orbit.tz    = C.tz;
+
+  updateCam();
 }
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+const _canvas = document.querySelector('canvas#c');
+
+_canvas?.addEventListener('pointerdown',  _onPointerDown);
+_canvas?.addEventListener('wheel',        _onWheel,       { passive: false });
+_canvas?.addEventListener('contextmenu',  _onContextMenu);
+
+// Sync initial state in case devtool or main.js changes orbit before first frame
+export function syncControls() {
+  T.theta = orbit.theta;
+  T.phi   = orbit.phi;
+  T.r     = orbit.r;
+  T.tx    = orbit.tx;
+  T.tz    = orbit.tz;
+  Object.assign(C, T);
+}
+
+// ─── Quick-reference cheatsheet (shown in console) ───────────────────────────
+console.log(
+  '%c🎥 Viewport Controls\n' +
+  'Right-drag / Middle-drag  →  Orbit\n' +
+  'Shift + drag              →  Pan\n' +
+  'Scroll wheel              →  Zoom\n' +
+  'F key (select object)     →  Focus',
+  'color:#88b8ff;font-size:12px;'
+);
