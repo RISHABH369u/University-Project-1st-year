@@ -17,9 +17,40 @@ import * as THREE from 'three';
 import { scene } from './scene.js';
 
 // ── Apne utility/builder functions yahan import karo ──────────────────────
-import { mkGulmohar, mkPeepal, mkNeem, mkMango, mkPalm, mkBamboo, mkAshoka, mkBanyan}  from './utils/trees.js';
+import { mkGulmohar, 
+  mkPeepal, 
+  mkNeem, 
+  mkMango, 
+  mkPalm, 
+  mkBamboo, 
+  mkAshoka, 
+  mkBanyan}  from './utils/trees.js';
+
 import { mkStreetLight }         from './utils/lights.js';
-import { mkBench, mkCar, mkStreetLamp, mkBin, mkBulletinBoard, mkFountain, mkBikeRack, mkBike, mkFlagPole, mkPicnicTable, mkVendingMachine, mkBusShelter, mkStatue, mkFireHydrant, mkBollard, mkSignpost, mkPaperStand, mkBusStopPole }        from './utils/props.js';
+import { 
+  mkBench, 
+  mkCar, 
+  mkStreetLamp, 
+  mkBin, 
+  mkBulletinBoard, 
+  mkFountain, 
+  mkTree, 
+  mkBikeRack, 
+  mkBike, 
+  mkFlagPole, 
+  mkPicnicTable, 
+  mkVendingMachine, 
+  mkBusShelter, 
+  mkStatue, 
+  mkFireHydrant, 
+  mkBollard, 
+  mkSignpost, 
+  mkPaperStand, 
+  mkBusStopPole, 
+  mkAutoRickshaw, 
+  mkWaterCooler, 
+  mkSpeedBump,  }        from './utils/props.js';
+  
 import { mkWall }                from './utils/wall.js';
 
 
@@ -348,8 +379,25 @@ export const OBJECT_REGISTRY = [
     spawn: (x, z) => mkBusStopPole(x, z, 0),
     code:  (pos, rot) => `mkBusStopPole(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
   },
+    {
+    key:   'auto_rickshaw',
+    icon:  '🛺',
+    label: 'Auto Rickshaw',
+    group: 'Street',
+    spawn: (x, z) => mkAutoRickshaw(x, z, 0),
+    code:  (pos, rot) => `mkAutoRickshaw(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+    {
 
-
+    key:   'water_cooler',
+    icon:  '💧',
+    label: 'Water Cooler',
+    group: 'Street',
+    spawn: (x, z) => mkWaterCooler(x, z, 0),
+    code:  (pos, rot) => `mkWaterCooler(${pos.x}, ${pos.z}, ${rot.y.toFixed(3)});`,
+  },
+    
+  
 // ────────────────────────────────────────────────────────────────────
   // 🛣  ROADS
   // ────────────────────────────────────────────────────────────────────
