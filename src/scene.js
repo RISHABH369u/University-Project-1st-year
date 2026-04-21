@@ -23,7 +23,7 @@ export function updateCam() {
     orbit.ty + orbit.r * Math.cos(orbit.phi),
     orbit.tz + orbit.r * Math.sin(orbit.phi) * Math.cos(orbit.theta)
   );
-  camera.lookAt(orbit.tx, 0, orbit.tz);
+  camera.lookAt(orbit.tx, orbit.ty, orbit.tz);
 }
 
 updateCam();
@@ -39,11 +39,12 @@ export const controls = {
   enabled: true,
 
   // Mirrors the orbit look-at point so devtool's F-key focus works
-  target: new THREE.Vector3(orbit.tx, 0, orbit.tz),
+  target: new THREE.Vector3(orbit.tx, orbit.ty, orbit.tz),
 
   // Called by devtool after it sets controls.target — applies to your orbit system
   update() {
     orbit.tx = this.target.x;
+    orbit.ty = this.target.y;
     orbit.tz = this.target.z;
     updateCam();
   },
