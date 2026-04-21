@@ -117,8 +117,12 @@ const TC = new TransformControls(camera, renderer.domElement);
 TC.setSize(0.85);
 TC.setSpace(STATE.transformSpace);
 
+// _wasDragging: set when TC drag ends so the subsequent click event is ignored
+let _wasDragging = false;
+
 TC.addEventListener('dragging-changed', e => {
   STATE.isDraggingTC = e.value;
+  if (!e.value) _wasDragging = true;   // drag just ended — ignore the next click
   if (controls) controls.enabled = !e.value;
   _blocker(e.value);
 });
@@ -127,23 +131,34 @@ TC.addEventListener('objectChange', () => {
 });
 scene.add(TC);
 
-// Capture-phase killer — stops orbit events reaching interaction.js while TC active
-function _tcKill(e) { if (STATE.isDraggingTC) e.stopImmediatePropagation(); }
-for (const ev of ['mousemove','mousedown','pointermove','pointerdown']) {
-  renderer.domElement.addEventListener(ev, _tcKill, true);
-  window.addEventListener(ev, _tcKill, true);
-}
+// _tcPointerDown: set when the pointer goes down on a TC gizmo axis handle so
+// that _onClick does not deselect the object on a quick tap of the handle.
+let _tcPointerDown = false;
+renderer.domElement.addEventListener('pointerdown', () => {
+  _wasDragging = false;            // clear any stale drag-end flag before new interaction
+  _tcPointerDown = TC.object !== null && TC.axis !== null;
+}, true);
+
+// NOTE: The old "capture-phase killer" (_tcKill) that used
+// window.addEventListener(ev, _tcKill, true) has been intentionally removed.
+// It called stopImmediatePropagation() at the window level which prevented
+// TransformControls from receiving its own pointermove/pointerdown events
+// during a drag, making Move/Rotate/Scale completely non-functional.
+// controls.js and interaction.js already guard against orbit during TC drag
+// via window._dtCanOrbit(), so the killer is neither needed nor safe.
 
 let _blk = null;
 function _blocker(on) {
   if (on && !_blk) {
     _blk = document.createElement('div');
-    _blk.style.cssText = 'position:fixed;inset:0;z-index:8000;cursor:grabbing;';
+    // pointer-events:none — show grabbing cursor without intercepting events
+    _blk.style.cssText = 'position:fixed;inset:0;z-index:8000;cursor:grabbing;pointer-events:none;';
     document.body.appendChild(_blk);
   } else if (!on && _blk) { _blk.remove(); _blk = null; }
 }
 
 window.addEventListener('pointerup', () => {
+  _tcPointerDown = false;   // clear gizmo-tap flag if no click fired after pointerup
   if (!TC.dragging) {
     STATE.isDraggingTC = false;
     if (controls && !isPlayerActive()) controls.enabled = true;
@@ -703,6 +718,12 @@ function _onMove(e) {
 function _onClick(e) {
   if (isPlayerActive() || STATE.inventoryOpen) return;
   if (e.detail > 1 || TC.dragging || STATE.isDraggingTC) return;
+  // Ignore the click that immediately follows the end of a TC drag (mouse-up
+  // resets isDraggingTC before the click event fires, so we need a separate flag).
+  if (_wasDragging) { _wasDragging = false; return; }
+  // Ignore taps on a TC gizmo axis handle — the gizmo is not in STATE.objects
+  // so the ray-cast would miss and incorrectly call clrSel().
+  if (_tcPointerDown) { _tcPointerDown = false; return; }
 
   // Close props if clicking outside
   const props = document.getElementById('mc-props');
