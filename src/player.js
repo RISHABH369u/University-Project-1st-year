@@ -136,12 +136,38 @@ export function updatePlayer() {
     _root.rotation.y += diff * 0.20;
   }
 
-  // Head always faces camera direction (independent of body)
+  // // Head always faces camera direction (independent of body)
+  // if (_head) {
+  //   const bodyY = _root.rotation.y;
+  //   _head.rotation.y  = _yaw - bodyY;          // horizontal face-toward-cam
+  //   _head.rotation.x  = -_pitch * 0.5;         // tilt with camera pitch
+  // }
+
+
+  // Head faces FORWARD (away from camera) with slight look-ahead
   if (_head) {
-    const bodyY = _root.rotation.y;
-    _head.rotation.y  = _yaw - bodyY;          // horizontal face-toward-cam
-    _head.rotation.x  = -_pitch * 0.5;         // tilt with camera pitch
+    // Camera is behind the player at angle _yaw
+    // Player faces _yaw + PI (forward, away from camera)
+    // Body rotation.y converges to forward direction
+    // So head.rotation.y = 0 means head faces same way as body = forward
+    const bodyY = _root.rotation.z;
+    //  _head.rotation.y  = _yaw - bodyY;          // horizontal face-toward-cam
+     _head.rotation.x  = -_pitch * 0.5;      
+    
+    // Smooth the head to face forward (small idle sway for life)
+    const idleSway = _moving ? 0 : Math.sin(Date.now() * 0.0012) * 0.04;
+    _head.rotation.y = THREE.MathUtils.lerp(_head.rotation.y, idleSway, 0.08);
+    
+    // Slight pitch down when running, neutral when idle
+    const targetPitch = _moving ? (_keys.shift ? -0.06 : -0.03) : 0;
+    _head.rotation.x = THREE.MathUtils.lerp(_head.rotation.x, targetPitch, 0.06);
+    
+    // Small jump reaction: head tilts back on takeoff
+    if (!_onGround && _velY > 0.1) {
+      _head.rotation.x = THREE.MathUtils.lerp(_head.rotation.x, 0.15, 0.12);
+    }
   }
+
 
   // Animate limbs
   _animateLimbs();
