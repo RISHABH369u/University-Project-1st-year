@@ -38,6 +38,7 @@ const T = {
   phi:   orbit.phi,
   r:     orbit.r,
   tx:    orbit.tx,
+  ty:    orbit.ty,
   tz:    orbit.tz,
 };
 
@@ -101,20 +102,24 @@ function _onPointerMove(e) {
 
   if (_panMode) {
     // ── PAN ──
-    // Move the look-at target in the plane perpendicular to the view direction.
-    // We derive right & forward vectors from the current theta.
+    // Move the look-at target along the camera's local right and up axes
+    // so panning feels like Blender: Shift+drag moves the view in screen space.
     const scale = (T.r / 80) * PAN_SPEED;  // pan scales with zoom distance
 
-    // Right vector in world XZ: perpendicular to theta
-    const rightX = Math.cos(T.theta);
+    // Camera right vector (world space) — perpendicular to view, horizontal
+    const rightX =  Math.cos(T.theta);
     const rightZ = -Math.sin(T.theta);
 
-    // Forward vector projected on ground (no Y tilt)
-    const fwdX = -Math.sin(T.theta);
-    const fwdZ = -Math.cos(T.theta);
+    // Camera up vector (world space) — derived from theta and phi
+    const upX = -Math.sin(T.theta) * Math.cos(T.phi);
+    const upY =  Math.sin(T.phi);
+    const upZ = -Math.cos(T.theta) * Math.cos(T.phi);
 
-    T.tx -= (dx * rightX - dy * fwdX) * scale;
-    T.tz -= (dx * rightZ - dy * fwdZ) * scale;
+    // dx maps to the right vector; dy maps to the up vector
+    // (screen Y increases downward, so dy>0 = drag down = pan down = subtract up)
+    T.tx -= (dx * rightX + dy * upX) * scale;
+    T.ty -= dy * upY * scale;
+    T.tz -= (dx * rightZ + dy * upZ) * scale;
   } else {
     // ── ORBIT ──
     T.theta -= dx * ORBIT_SPEED;
@@ -159,6 +164,7 @@ export function handleControls() {
   // Sync target from controls.target (devtool F-key sets this)
   if (controls.target) {
     T.tx = controls.target.x;
+    T.ty = controls.target.y;
     T.tz = controls.target.z;
   }
 
@@ -167,6 +173,7 @@ export function handleControls() {
   C.phi   = C.phi   + (T.phi   - C.phi)   * DAMP * 6;
   C.r     = C.r     + (T.r     - C.r)     * DAMP * 6;
   C.tx    = C.tx    + (T.tx    - C.tx)    * DAMP * 6;
+  C.ty    = C.ty    + (T.ty    - C.ty)    * DAMP * 6;
   C.tz    = C.tz    + (T.tz    - C.tz)    * DAMP * 6;
 
   // Write smoothed values to orbit object → updateCam reads them
@@ -174,6 +181,7 @@ export function handleControls() {
   orbit.phi   = C.phi;
   orbit.r     = C.r;
   orbit.tx    = C.tx;
+  orbit.ty    = C.ty;
   orbit.tz    = C.tz;
 
   updateCam();
@@ -193,6 +201,7 @@ export function syncControls() {
   T.phi   = orbit.phi;
   T.r     = orbit.r;
   T.tx    = orbit.tx;
+  T.ty    = orbit.ty;
   T.tz    = orbit.tz;
   Object.assign(C, T);
 }
